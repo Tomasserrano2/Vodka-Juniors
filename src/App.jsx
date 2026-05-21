@@ -1,7 +1,22 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Users, LayoutTemplate, Shield, Plus, X, GripVertical, CheckCircle, XCircle } from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
-// Mock database for Vodka Juniors
+// REPLACE THIS object with the exact one from your Firebase Project Settings!
+const firebaseConfig = {
+  apiKey: "AIzaSyAI1tfjgtlLqfVEfSnyhUYWIEcz_yjlTCE",
+  authDomain: "vodka-juniors.firebaseapp.com",
+  projectId: "vodka-juniors",
+  storageBucket: "vodka-juniors.firebasestorage.app",
+  messagingSenderId: "836406435815",
+  appId: "1:836406435815:web:0b10e00b5cc635a8d82742"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// We keep this just in case the database is completely empty on the first load!
 const INITIAL_PLAYERS = [
   { id: '1', name: 'Alex (GK)', positions: 'GK', attendance: 12, refereeDuty: 1, goals: 0, assists: 1, performance: 8.5, available: true },
   { id: '2', name: 'Marcus (CB)', positions: 'CB', attendance: 10, refereeDuty: 0, goals: 1, assists: 0, performance: 7.2, available: true },
@@ -27,91 +42,157 @@ const FORMATIONS = {
   '5-3-2': [1, 5, 3, 2]
 };
 
+// A special input component to prevent the cursor from jumping while typing to the live database
+const SyncInput = ({ value, onSave, type = "text", className, step }) => {
+  const [localVal, setLocalVal] = useState(value);
+  useEffect(() => { setLocalVal(value); }, [value]);
+
+  const handleBlur = () => {
+    let finalVal = localVal;
+    if (type === 'number') finalVal = parseFloat(localVal) || 0;
+    onSave(finalVal);
+  };
+
+  return (
+    <input 
+      type={type} 
+      step={step}
+      value={localVal} 
+      onChange={(e) => setLocalVal(e.target.value)} 
+      onBlur={handleBlur}
+      className={className} 
+    />
+  );
+};
+
 export default function VodkaJuniorsApp() {
-  const [activeTab, setActiveTab] = useState('matchday'); // 'matchday' or 'dashboard'
-  const [players, setPlayers] = useState(INITIAL_PLAYERS);
+  const [activeTab, setActiveTab] = useState('matchday');
+  
+  // State is now loaded from Firebase!
+  const [players, setPlayers] = useState([]);
   const [formation, setFormation] = useState('4-3-3');
   const [customFormationStr, setCustomFormationStr] = useState('1-4-2-3');
-  
-  // Maps slot indexes (0 to 10) to player IDs
   const [pitchState, setPitchState] = useState({});
 
-  // Reset pitch if formation changes (since slot counts/positions change)
-  const handleFormationChange = (e) => {
-    setFormation(e.target.value);
-    setPitchState({});
+  // 1. FIREBASE CONNECTION: Players Database
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, "players"), (snapshot) => {
+      if (snapshot.empty) {
+        // If database is completely empty (first time running), seed it with initial players!
+        INITIAL_PLAYERS.forEach(async (player) => {
+          await setDoc(doc(db, "players", player.id), player);
+        });
+      } else {
+        // Otherwise, download the players from the cloud
+        const loadedPlayers = [];
+        snapshot.forEach((doc) => {
+          loadedPlayers.push({ id: doc.id, ...doc.data() });
+        });
+        setPlayers(loadedPlayers);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. FIREBASE CONNECTION: Match Lineup Sync
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, "match", "currentLineup"), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.pitchState) setPitchState(data.pitchState);
+        if (data.formation) setFormation(data.formation);
+        if (data.customFormationStr) setCustomFormationStr(data.customFormationStr);
+      } else {
+        // Initialize the match document if it doesn't exist
+        setDoc(doc(db, "match", "currentLineup"), {
+          pitchState: {},
+          formation: '4-3-3',
+          customFormationStr: '1-4-2-3'
+        });
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+
+  // --- FIREBASE WRITE ACTIONS ---
+
+  const handleFormationChange = async (e) => {
+    const newForm = e.target.value;
+    await setDoc(doc(db, "match", "currentLineup"), { formation: newForm, pitchState: {} }, { merge: true });
+  };
+
+  const handleCustomFormationBlur = async () => {
+    await setDoc(doc(db, "match", "currentLineup"), { customFormationStr, pitchState: {} }, { merge: true });
   };
 
   const handleDragStart = (e, playerId) => {
     e.dataTransfer.setData('playerId', playerId);
   };
 
-  const handleDropOnPitch = (e, slotIndex) => {
+  const handleDropOnPitch = async (e, slotIndex) => {
     e.preventDefault();
     const playerId = e.dataTransfer.getData('playerId');
     
-    setPitchState(prev => {
-      const newState = { ...prev };
-      
-      // If player is already on the pitch, remove them from their old slot
-      Object.keys(newState).forEach(key => {
-        if (newState[key] === playerId) {
-          newState[key] = null;
-        }
-      });
-      
-      // Assign to new slot
-      newState[slotIndex] = playerId;
-      return newState;
+    // Calculate new state locally, then push to Firebase
+    const newState = { ...pitchState };
+    Object.keys(newState).forEach(key => {
+      if (newState[key] === playerId) newState[key] = null;
     });
+    newState[slotIndex] = playerId;
+
+    await setDoc(doc(db, "match", "currentLineup"), { pitchState: newState }, { merge: true });
   };
 
-  const handleDropOnBench = (e) => {
+  const handleDropOnBench = async (e) => {
     e.preventDefault();
     const playerId = e.dataTransfer.getData('playerId');
     
-    // Remove player from pitch
-    setPitchState(prev => {
-      const newState = { ...prev };
-      Object.keys(newState).forEach(key => {
-        if (newState[key] === playerId) {
-          delete newState[key];
-        }
-      });
-      return newState;
+    const newState = { ...pitchState };
+    Object.keys(newState).forEach(key => {
+      if (newState[key] === playerId) delete newState[key];
     });
+
+    await setDoc(doc(db, "match", "currentLineup"), { pitchState: newState }, { merge: true });
   };
 
   const handleDragOver = (e) => {
     e.preventDefault();
   };
 
-  const toggleAvailability = (id) => {
-    setPlayers(players.map(p => {
-      if (p.id === id) {
-        // If making unavailable, remove from pitch
-        if (p.available) {
-          setPitchState(prev => {
-            const newState = { ...prev };
-            Object.keys(newState).forEach(key => {
-              if (newState[key] === id) delete newState[key];
-            });
-            return newState;
-          });
+  const toggleAvailability = async (id) => {
+    const player = players.find(p => p.id === id);
+    if (!player) return;
+
+    const newAvailability = !player.available;
+    
+    // Update player availability in DB
+    await setDoc(doc(db, "players", id), { available: newAvailability }, { merge: true });
+
+    // If making unavailable, remove them from the pitch in the DB
+    if (newAvailability === false) {
+      const newState = { ...pitchState };
+      let changed = false;
+      Object.keys(newState).forEach(key => {
+        if (newState[key] === id) {
+          delete newState[key];
+          changed = true;
         }
-        return { ...p, available: !p.available };
+      });
+      if (changed) {
+        await setDoc(doc(db, "match", "currentLineup"), { pitchState: newState }, { merge: true });
       }
-      return p;
-    }));
+    }
   };
 
-  const updatePlayerStat = (id, field, value) => {
-    setPlayers(players.map(p => p.id === id ? { ...p, [field]: value } : p));
+  const updatePlayerStat = async (id, field, value) => {
+    await setDoc(doc(db, "players", id), { [field]: value }, { merge: true });
   };
 
-  const addNewPlayer = () => {
+  const addNewPlayer = async () => {
+    const newId = Date.now().toString();
     const newPlayer = {
-      id: Date.now().toString(),
+      id: newId,
       name: 'New Player',
       positions: '',
       attendance: 0,
@@ -121,19 +202,28 @@ export default function VodkaJuniorsApp() {
       performance: 0,
       available: true
     };
-    setPlayers([...players, newPlayer]);
+    await setDoc(doc(db, "players", newId), newPlayer);
   };
 
-  const deletePlayer = (id) => {
-    setPlayers(players.filter(p => p.id !== id));
-    setPitchState(prev => {
-      const newState = { ...prev };
-      Object.keys(newState).forEach(key => {
-        if (newState[key] === id) delete newState[key];
-      });
-      return newState;
+  const deletePlayer = async (id) => {
+    // Delete from Players DB
+    await deleteDoc(doc(db, "players", id));
+    
+    // Remove from pitch DB if they were on it
+    const newState = { ...pitchState };
+    let changed = false;
+    Object.keys(newState).forEach(key => {
+      if (newState[key] === id) {
+        delete newState[key];
+        changed = true;
+      }
     });
+    if (changed) {
+      await setDoc(doc(db, "match", "currentLineup"), { pitchState: newState }, { merge: true });
+    }
   };
+
+  // --- UI RENDER LOGIC ---
 
   const availablePlayers = players.filter(p => p.available);
   const pitchPlayerIds = Object.values(pitchState).filter(Boolean);
@@ -180,35 +270,33 @@ export default function VodkaJuniorsApp() {
                 </button>
               </td>
               <td className="p-3">
-                <input 
-                  type="text" 
+                <SyncInput 
                   value={player.name} 
-                  onChange={(e) => updatePlayerStat(player.id, 'name', e.target.value)}
+                  onSave={(val) => updatePlayerStat(player.id, 'name', val)}
                   className="bg-transparent border-b border-transparent focus:border-indigo-400 focus:outline-none w-full"
                 />
               </td>
               <td className="p-3">
-                <input 
-                  type="text" 
+                <SyncInput 
                   value={player.positions} 
-                  onChange={(e) => updatePlayerStat(player.id, 'positions', e.target.value)}
+                  onSave={(val) => updatePlayerStat(player.id, 'positions', val)}
                   className="bg-transparent border-b border-transparent focus:border-indigo-400 focus:outline-none w-24 text-sm"
                 />
               </td>
-              <td className="p-3">
-                <input type="number" value={player.attendance} onChange={(e) => updatePlayerStat(player.id, 'attendance', parseInt(e.target.value) || 0)} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" />
+              <td className="p-3 text-center">
+                <SyncInput type="number" value={player.attendance} onSave={(val) => updatePlayerStat(player.id, 'attendance', val)} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" />
               </td>
-              <td className="p-3">
-                <input type="number" value={player.refereeDuty} onChange={(e) => updatePlayerStat(player.id, 'refereeDuty', parseInt(e.target.value) || 0)} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" />
+              <td className="p-3 text-center">
+                <SyncInput type="number" value={player.refereeDuty} onSave={(val) => updatePlayerStat(player.id, 'refereeDuty', val)} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" />
               </td>
-              <td className="p-3">
-                <input type="number" value={player.goals} onChange={(e) => updatePlayerStat(player.id, 'goals', parseInt(e.target.value) || 0)} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" />
+              <td className="p-3 text-center">
+                <SyncInput type="number" value={player.goals} onSave={(val) => updatePlayerStat(player.id, 'goals', val)} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" />
               </td>
-              <td className="p-3">
-                <input type="number" value={player.assists} onChange={(e) => updatePlayerStat(player.id, 'assists', parseInt(e.target.value) || 0)} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" />
+              <td className="p-3 text-center">
+                <SyncInput type="number" value={player.assists} onSave={(val) => updatePlayerStat(player.id, 'assists', val)} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" />
               </td>
-              <td className="p-3">
-                <input type="number" step="0.1" value={player.performance} onChange={(e) => updatePlayerStat(player.id, 'performance', parseFloat(e.target.value) || 0)} className="w-16 bg-slate-900 border border-slate-700 rounded p-1 text-center" />
+              <td className="p-3 text-center">
+                <SyncInput type="number" step="0.1" value={player.performance} onSave={(val) => updatePlayerStat(player.id, 'performance', val)} className="w-16 bg-slate-900 border border-slate-700 rounded p-1 text-center" />
               </td>
               <td className="p-3 text-center">
                 <button onClick={() => deletePlayer(player.id)} className="text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -225,13 +313,13 @@ export default function VodkaJuniorsApp() {
   const renderPitch = () => {
     const layout = formation === 'Custom' 
       ? customFormationStr.split(/[-,\s]+/).map(n => parseInt(n, 10)).filter(n => !isNaN(n) && n > 0)
-      : FORMATIONS[formation];
+      : FORMATIONS[formation] || [1, 4, 3, 3];
       
     let globalSlotIndex = 0;
 
     return (
       <div className="relative w-full max-w-2xl mx-auto aspect-[3/4] bg-emerald-700 border-4 border-white shadow-2xl rounded-sm overflow-hidden flex flex-col justify-between py-8">
-        {/* Pitch Markings (CSS drawn) */}
+        {/* Pitch Markings */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[40%] h-[15%] border-4 border-t-0 border-white opacity-50 pointer-events-none"></div>
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[20%] h-[6%] border-4 border-t-0 border-white opacity-50 pointer-events-none"></div>
         <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[40%] h-[15%] border-4 border-b-0 border-white opacity-50 pointer-events-none"></div>
@@ -339,10 +427,8 @@ export default function VodkaJuniorsApp() {
               <input
                 type="text"
                 value={customFormationStr}
-                onChange={(e) => {
-                  setCustomFormationStr(e.target.value);
-                  setPitchState({}); // Reset pitch layout when custom string changes
-                }}
+                onChange={(e) => setCustomFormationStr(e.target.value)}
+                onBlur={handleCustomFormationBlur}
                 placeholder="e.g. 1-4-3-3"
                 className="bg-slate-900 text-white border border-slate-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500 w-32 text-sm"
                 title="Enter numbers separated by dashes (e.g. 1-4-3-3)"
