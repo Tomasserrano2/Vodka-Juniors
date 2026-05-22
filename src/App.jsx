@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, LayoutTemplate, Shield, Plus, X, GripVertical, CheckCircle, XCircle, Search, Download, History, Play, Square, Save, Activity, Clock, Trophy } from 'lucide-react';
+import { Users, LayoutTemplate, Shield, Plus, X, GripVertical, CheckCircle, XCircle, Search, Download, History, Play, Square, Save, Activity, Clock, Trophy, Trash2, Edit2, Check } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
 
@@ -12,6 +12,7 @@ const firebaseConfig = {
   messagingSenderId: "836406435815",
   appId: "1:836406435815:web:0b10e00b5cc635a8d82742"
 };
+
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -38,7 +39,7 @@ const FORMATION_LABELS = {
   '5-3-2': ['GK', 'LWB', 'LCB', 'CB', 'RCB', 'RWB', 'LCM', 'CM', 'RCM', 'ST', 'ST']
 };
 
-const SyncInput = ({ value, onSave, type = "text", className, step, onClick }) => {
+const SyncInput = ({ value, onSave, type = "text", className, step, onClick, placeholder }) => {
   const [localVal, setLocalVal] = useState(value);
   useEffect(() => { setLocalVal(value); }, [value]);
 
@@ -56,39 +57,41 @@ const SyncInput = ({ value, onSave, type = "text", className, step, onClick }) =
       onChange={(e) => setLocalVal(e.target.value)} 
       onBlur={handleBlur}
       onClick={onClick}
+      placeholder={placeholder}
       className={className} 
     />
   );
 };
 
 export default function VodkaJuniorsApp() {
-  const [activeTab, setActiveTab] = useState('matchday'); // matchday, dashboard, history
+  const [activeTab, setActiveTab] = useState('matchday');
   
-  // State from Firebase
   const [players, setPlayers] = useState([]);
   const [pastMatches, setPastMatches] = useState([]);
   
-  // Live Match State (from Firebase match/currentLineup)
   const [formation, setFormation] = useState('4-3-3');
   const [customFormationStr, setCustomFormationStr] = useState('1-4-2-3');
   const [pitchState, setPitchState] = useState({});
   const [customLabels, setCustomLabels] = useState({});
-  const [matchStatus, setMatchStatus] = useState('pre'); // 'pre', 'live', 'review'
+  const [matchStatus, setMatchStatus] = useState('pre'); 
   const [matchEvents, setMatchEvents] = useState([]); 
   const [matchRatings, setMatchRatings] = useState({}); 
   const [matchLeague, setMatchLeague] = useState('');
   const [matchMvp, setMatchMvp] = useState('');
+  const [matchOpponent, setMatchOpponent] = useState('');
+  const [matchScoreVJ, setMatchScoreVJ] = useState('');
+  const [matchScoreOpp, setMatchScoreOpp] = useState('');
 
-  // Local UI State
   const [benchSearchQuery, setBenchSearchQuery] = useState('');
   const [activeSlotSearch, setActiveSlotSearch] = useState(null);
   const [slotSearchQuery, setSlotSearchQuery] = useState('');
   const [dbSearchQuery, setDbSearchQuery] = useState('');
   const [dbSortOption, setDbSortOption] = useState('default');
   const [selectedPlayerDetails, setSelectedPlayerDetails] = useState(null);
-  const [actionModal, setActionModal] = useState(null); // Used for entering minute of goal/assist/sub
+  const [actionModal, setActionModal] = useState(null); 
+  const [editingHistoryId, setEditingHistoryId] = useState(null); // For inline history editing
   
-  const pitchRef = useRef(null);
+  const exportRef = useRef(null); // Moved ref up to wrap both bench and pitch
 
   // --- FIREBASE CONNECTIONS ---
 
@@ -132,9 +135,12 @@ export default function VodkaJuniorsApp() {
         setMatchRatings(data.ratings || {});
         setMatchLeague(data.league || '');
         setMatchMvp(data.mvp || '');
+        setMatchOpponent(data.opponent || '');
+        setMatchScoreVJ(data.scoreVJ || '');
+        setMatchScoreOpp(data.scoreOpp || '');
       } else {
         setDoc(doc(db, "match", "currentLineup"), {
-          pitchState: {}, formation: '4-3-3', customFormationStr: '1-4-2-3', customLabels: {}, status: 'pre', events: [], ratings: {}, league: '', mvp: ''
+          pitchState: {}, formation: '4-3-3', customFormationStr: '1-4-2-3', customLabels: {}, status: 'pre', events: [], ratings: {}, league: '', mvp: '', opponent: '', scoreVJ: '', scoreOpp: ''
         });
       }
     });
@@ -222,7 +228,7 @@ export default function VodkaJuniorsApp() {
   const handleDragOver = (e) => e.preventDefault();
 
   const handleSaveImage = async () => {
-    if (pitchRef.current) {
+    if (exportRef.current) {
       try {
         if (!window.html2canvas) {
           await new Promise((resolve, reject) => {
@@ -233,10 +239,11 @@ export default function VodkaJuniorsApp() {
             document.head.appendChild(script);
           });
         }
-        const canvas = await window.html2canvas(pitchRef.current, { backgroundColor: '#047857', scale: 2 });
+        // Take screenshot of the entire container (Bench + Pitch)
+        const canvas = await window.html2canvas(exportRef.current, { backgroundColor: '#020617', scale: 2 });
         const link = document.createElement("a");
         link.href = canvas.toDataURL("image/png");
-        link.download = `VodkaJuniors_Lineup.png`;
+        link.download = `VodkaJuniors_Squad.png`;
         link.click();
       } catch (err) { console.error("Error saving image:", err); }
     }
@@ -251,6 +258,9 @@ export default function VodkaJuniorsApp() {
       updates.ratings = {};
       updates.league = '';
       updates.mvp = '';
+      updates.opponent = '';
+      updates.scoreVJ = '';
+      updates.scoreOpp = '';
     }
     await setDoc(doc(db, "match", "currentLineup"), updates, { merge: true });
   };
@@ -268,7 +278,12 @@ export default function VodkaJuniorsApp() {
       await setDoc(doc(db, "match", "currentLineup"), { events: newEvents, pitchState: newState }, { merge: true });
     } else {
       newEvents[newEvents.length - 1].playerId = actionModal.playerId;
-      await setDoc(doc(db, "match", "currentLineup"), { events: newEvents }, { merge: true });
+      // Auto-increment Vodka Juniors score if it's a goal and score fields are visible
+      let newScoreVJ = matchScoreVJ;
+      if (actionModal.type === 'goal') {
+        newScoreVJ = (parseInt(matchScoreVJ) || 0) + 1;
+      }
+      await setDoc(doc(db, "match", "currentLineup"), { events: newEvents, scoreVJ: newScoreVJ }, { merge: true });
     }
     setActionModal(null);
   };
@@ -292,14 +307,23 @@ export default function VodkaJuniorsApp() {
       ratings: matchRatings,
       participated: Array.from(playersInvolved),
       league: matchLeague,
-      mvp: matchMvp
+      mvp: matchMvp,
+      opponent: matchOpponent || 'Unknown Opponent',
+      scoreVJ: matchScoreVJ || 0,
+      scoreOpp: matchScoreOpp || 0
     };
     
     await addDoc(collection(db, "pastMatches"), newMatch);
     
     // Reset back to pre-match
-    await setDoc(doc(db, "match", "currentLineup"), { status: 'pre', events: [], ratings: {}, league: '', mvp: '' }, { merge: true });
+    await setDoc(doc(db, "match", "currentLineup"), { status: 'pre', events: [], ratings: {}, league: '', mvp: '', opponent: '', scoreVJ: '', scoreOpp: '' }, { merge: true });
     setActiveTab('history');
+  };
+
+  const deletePastMatch = async (matchId) => {
+    if(window.confirm('Are you sure you want to delete this match? This will recalculate all player averages and goals instantly.')) {
+      await deleteDoc(doc(db, "pastMatches", matchId));
+    }
   };
 
   // --- STATS ENGINE ---
@@ -497,66 +521,119 @@ export default function VodkaJuniorsApp() {
 
   const renderHistory = () => (
     <div className="space-y-4">
-      {pastMatches.map((match, i) => (
-        <div key={i} className="bg-slate-800 rounded-xl shadow-xl border border-slate-700 p-5">
-          <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
-            <div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <History className="w-5 h-5 text-indigo-400" />
-                {match.league ? `${match.league} Match` : 'Match'}
-              </h3>
-              <p className="text-sm text-slate-400">{new Date(match.date).toLocaleDateString()}</p>
-            </div>
-            <span className="bg-indigo-600/20 text-indigo-400 px-3 py-1 rounded-full text-sm font-bold">
-              {match.formation}
-            </span>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row gap-6">
-            <div className="flex-1">
-              <h4 className="text-slate-400 text-sm font-semibold mb-2">Match Events</h4>
-              {match.events && match.events.length > 0 ? (
-                <ul className="space-y-2">
-                  {match.events.sort((a,b) => a.minute - b.minute).map((ev, j) => (
-                    <li key={j} className="text-sm flex items-center gap-2 bg-slate-900/50 p-2 rounded">
-                      <span className="text-indigo-400 font-mono w-10">{ev.minute}'</span>
-                      {ev.type === 'goal' && <span>⚽ <strong className="text-emerald-400">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> scored!</span>}
-                      {ev.type === 'assist' && <span>👟 <strong className="text-indigo-300">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> assisted.</span>}
-                      {ev.type === 'sub' && <span>🔄 <strong className="text-emerald-400">{players.find(p=>p.id===ev.playerIn)?.name || 'In'}</strong> ON, <span className="text-slate-500">{players.find(p=>p.id===ev.playerOut)?.name || 'Out'}</span> OFF</span>}
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="text-sm text-slate-500">No events recorded.</p>}
-
-              {match.mvp && (
-                <div className="mt-4 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 flex items-center gap-3">
-                  <Trophy className="w-6 h-6 text-amber-500" />
-                  <div>
-                    <p className="text-[10px] text-amber-500/80 font-bold uppercase tracking-wider">Match MVP</p>
-                    <p className="text-white font-bold">{players.find(p => p.id === match.mvp)?.name || 'Unknown Player'}</p>
-                  </div>
-                </div>
+      {pastMatches.map((match, i) => {
+        const isEditing = editingHistoryId === match.id;
+        
+        return (
+          <div key={match.id} className="bg-slate-800 rounded-xl shadow-xl border border-slate-700 p-5 relative group">
+            
+            {/* Quick Actions (Edit/Delete) */}
+            <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              {isEditing ? (
+                <button onClick={() => setEditingHistoryId(null)} className="p-2 bg-emerald-600/20 text-emerald-400 rounded-lg hover:bg-emerald-600/40" title="Done Editing"><Check className="w-4 h-4" /></button>
+              ) : (
+                <button onClick={() => setEditingHistoryId(match.id)} className="p-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 hover:text-white" title="Edit Match Details"><Edit2 className="w-4 h-4" /></button>
               )}
+              <button onClick={() => deletePastMatch(match.id)} className="p-2 bg-rose-500/10 text-rose-400 rounded-lg hover:bg-rose-500/30" title="Delete Match"><Trash2 className="w-4 h-4" /></button>
+            </div>
+
+            <div className="flex flex-col mb-4 border-b border-slate-700 pb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <History className="w-5 h-5 text-indigo-400" />
+                {isEditing ? (
+                  <SyncInput 
+                    value={match.league} 
+                    placeholder="League / Competition"
+                    onSave={(val) => setDoc(doc(db, "pastMatches", match.id), { league: val }, { merge: true })}
+                    className="bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  />
+                ) : (
+                  <h3 className="text-sm font-bold text-indigo-300 uppercase tracking-wider">{match.league || 'Match'}</h3>
+                )}
+                <span className="bg-indigo-600/20 text-indigo-400 px-3 py-0.5 rounded-full text-xs font-bold ml-2">
+                  {match.formation}
+                </span>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2">
+                {isEditing ? (
+                  <div className="flex items-center gap-2 bg-slate-900 p-2 rounded-lg border border-slate-700">
+                    <span className="text-white font-bold">Vodka Juniors</span>
+                    <SyncInput type="number" value={match.scoreVJ} onSave={(val) => setDoc(doc(db, "pastMatches", match.id), { scoreVJ: val }, { merge: true })} className="w-12 bg-slate-800 border border-slate-600 rounded text-center text-white" />
+                    <span className="text-slate-500">-</span>
+                    <SyncInput type="number" value={match.scoreOpp} onSave={(val) => setDoc(doc(db, "pastMatches", match.id), { scoreOpp: val }, { merge: true })} className="w-12 bg-slate-800 border border-slate-600 rounded text-center text-white" />
+                    <SyncInput value={match.opponent} placeholder="Opponent Name" onSave={(val) => setDoc(doc(db, "pastMatches", match.id), { opponent: val }, { merge: true })} className="bg-slate-800 border border-slate-600 rounded px-2 text-white" />
+                  </div>
+                ) : (
+                  <div className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
+                    <span>Vodka Juniors</span>
+                    <span className="text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-lg">{match.scoreVJ || 0} - {match.scoreOpp || 0}</span>
+                    <span className="text-slate-400">{match.opponent || 'Opponent'}</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-2">{new Date(match.date).toLocaleDateString()}</p>
             </div>
             
-            <div className="flex-1">
-              <h4 className="text-slate-400 text-sm font-semibold mb-2">Player Ratings</h4>
-              <div className="grid grid-cols-2 gap-2">
-                {match.participated?.map(pid => {
-                   const p = players.find(p => p.id === pid);
-                   if (!p) return null;
-                   return (
-                     <div key={pid} className="flex justify-between text-sm bg-slate-900/50 p-2 rounded">
-                       <span className="text-slate-300 truncate pr-2">{getDisplayName(p)}</span>
-                       <span className="text-emerald-400 font-bold">{match.ratings[pid] || '-'}</span>
-                     </div>
-                   )
-                })}
+            <div className="flex flex-col sm:flex-row gap-6">
+              <div className="flex-1">
+                <h4 className="text-slate-400 text-sm font-semibold mb-2">Match Events</h4>
+                {match.events && match.events.length > 0 ? (
+                  <ul className="space-y-2">
+                    {match.events.sort((a,b) => a.minute - b.minute).map((ev, j) => (
+                      <li key={j} className="text-sm flex items-center gap-2 bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                        <span className="text-indigo-400 font-mono w-10">{ev.minute}'</span>
+                        {ev.type === 'goal' && <span>⚽ <strong className="text-emerald-400">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> scored!</span>}
+                        {ev.type === 'assist' && <span>👟 <strong className="text-indigo-300">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> assisted.</span>}
+                        {ev.type === 'sub' && <span>🔄 <strong className="text-emerald-400">{players.find(p=>p.id===ev.playerIn)?.name || 'In'}</strong> ON, <span className="text-slate-500">{players.find(p=>p.id===ev.playerOut)?.name || 'Out'}</span> OFF</span>}
+                      </li>
+                    ))}
+                  </ul>
+                ) : <p className="text-sm text-slate-500 italic">No events recorded.</p>}
+
+                {match.mvp && !isEditing && (
+                  <div className="mt-4 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 flex items-center gap-3 w-fit">
+                    <Trophy className="w-6 h-6 text-amber-500" />
+                    <div>
+                      <p className="text-[10px] text-amber-500/80 font-bold uppercase tracking-wider">Match MVP</p>
+                      <p className="text-white font-bold">{players.find(p => p.id === match.mvp)?.name || 'Unknown Player'}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex-1">
+                <h4 className="text-slate-400 text-sm font-semibold mb-2">Player Ratings</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  {match.participated?.map(pid => {
+                     const p = players.find(p => p.id === pid);
+                     if (!p) return null;
+                     return (
+                       <div key={pid} className="flex justify-between items-center text-sm bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                         <span className="text-slate-300 truncate pr-2">{getDisplayName(p)}</span>
+                         {isEditing ? (
+                            <SyncInput 
+                              type="number" 
+                              step="0.1" 
+                              value={match.ratings[pid] || 0} 
+                              onSave={(val) => {
+                                const newRatings = { ...match.ratings, [pid]: parseFloat(val) || 0 };
+                                setDoc(doc(db, "pastMatches", match.id), { ratings: newRatings }, { merge: true });
+                              }} 
+                              className="w-14 bg-slate-800 border border-slate-600 text-emerald-400 font-bold rounded p-1 text-center focus:outline-none" 
+                            />
+                         ) : (
+                            <span className="text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">{match.ratings[pid] || '-'}</span>
+                         )}
+                       </div>
+                     )
+                  })}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
       {pastMatches.length === 0 && (
         <div className="bg-slate-800 p-10 rounded-xl border border-slate-700 text-center">
           <History className="w-12 h-12 text-slate-600 mx-auto mb-3" />
@@ -568,7 +645,6 @@ export default function VodkaJuniorsApp() {
   );
 
   const renderPostMatchReview = () => {
-    // Collect everyone who played (on pitch at end + subbed out)
     const playersInvolved = Array.from(new Set([
         ...Object.values(pitchState),
         ...matchEvents.filter(e => e.type === 'sub').map(e => e.playerOut)
@@ -579,6 +655,41 @@ export default function VodkaJuniorsApp() {
         <div className="text-center mb-8">
           <h2 className="text-3xl font-black text-white mb-2">Post-Match Review</h2>
           <p className="text-slate-400">Rate the players and log match details to update the career stats!</p>
+        </div>
+
+        {/* New Opponent & Score Section */}
+        <div className="bg-slate-900 rounded-lg p-5 border border-slate-700 mb-6 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex-1 w-full">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">Opponent Name</label>
+            <input 
+              type="text" 
+              placeholder="e.g. FC Bayern" 
+              value={matchOpponent}
+              onChange={(e) => updateMatchField('opponent', e.target.value)}
+              className="w-full bg-slate-800 border border-slate-600 text-white rounded p-3 focus:outline-none focus:border-indigo-500 font-bold"
+            />
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-center">
+              <label className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-1 block">Vodka Jrs</label>
+              <input 
+                type="number" 
+                value={matchScoreVJ}
+                onChange={(e) => updateMatchField('scoreVJ', e.target.value)}
+                className="w-20 bg-slate-800 border border-indigo-500/50 text-white rounded p-3 focus:outline-none focus:border-indigo-500 font-black text-2xl text-center"
+              />
+            </div>
+            <span className="text-2xl text-slate-500 font-black mt-4">-</span>
+            <div className="text-center">
+              <label className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-1 block">Opponent</label>
+              <input 
+                type="number" 
+                value={matchScoreOpp}
+                onChange={(e) => updateMatchField('scoreOpp', e.target.value)}
+                className="w-20 bg-slate-800 border border-rose-500/50 text-white rounded p-3 focus:outline-none focus:border-rose-500 font-black text-2xl text-center"
+              />
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -679,7 +790,8 @@ export default function VodkaJuniorsApp() {
     let globalSlotIndex = 0;
 
     return (
-      <div className="flex flex-col lg:flex-row gap-6">
+      // Added exportRef here so the camera captures both the Bench and the Pitch
+      <div ref={exportRef} className="flex flex-col lg:flex-row gap-6 bg-slate-950 p-2 sm:p-0 rounded-xl">
         {/* Bench Sidebar */}
         <div 
           className={`lg:w-1/4 w-full rounded-xl shadow-xl border flex flex-col h-[400px] lg:h-[800px] transition-colors ${matchStatus === 'live' ? 'bg-indigo-900/40 border-indigo-500/50' : 'bg-slate-800 border-slate-700'}`}
@@ -695,7 +807,7 @@ export default function VodkaJuniorsApp() {
               {matchStatus === 'live' ? 'Drag onto pitch to substitute' : 'Drag players to the pitch'}
             </p>
             
-            <div className="mt-3 relative">
+            <div className="mt-3 relative" data-html2canvas-ignore>
               <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
                 <Search className="h-4 w-4 text-slate-500" />
               </div>
@@ -722,7 +834,7 @@ export default function VodkaJuniorsApp() {
                   onDragStart={(e) => handleDragStart(e, player.id)}
                   className={`p-3 rounded-lg border cursor-grab active:cursor-grabbing transition-colors flex items-center shadow-sm ${matchStatus === 'live' ? 'bg-indigo-900/40 border-indigo-500/30 hover:bg-indigo-800/60' : 'bg-slate-700 border-slate-600 hover:bg-slate-650'}`}
                 >
-                  <GripVertical className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
+                  <GripVertical className="w-4 h-4 text-slate-400 mr-2 shrink-0" data-html2canvas-ignore />
                   <div className="flex-1 min-w-0">
                     <div className="text-white font-medium text-sm truncate">{player.name}</div>
                     <div className="text-xs text-indigo-300 font-semibold truncate">{player.positions}</div>
@@ -740,7 +852,7 @@ export default function VodkaJuniorsApp() {
         <div className="lg:w-3/4 w-full flex flex-col gap-4">
           
           {/* Match Control Header */}
-          <div className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xl transition-colors ${matchStatus === 'live' ? 'bg-indigo-900/80 border-indigo-500' : 'bg-slate-800 border-slate-700'}`}>
+          <div data-html2canvas-ignore className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xl transition-colors ${matchStatus === 'live' ? 'bg-indigo-900/80 border-indigo-500' : 'bg-slate-800 border-slate-700'}`}>
             <div className="flex items-center gap-3">
               {matchStatus === 'live' ? (
                 <>
@@ -755,8 +867,8 @@ export default function VodkaJuniorsApp() {
             <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
               {matchStatus === 'pre' && (
                 <>
-                  <button onClick={handleSaveImage} className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-md">
-                    <Download className="w-4 h-4" /> Export
+                  <button onClick={handleSaveImage} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-md">
+                    <Download className="w-4 h-4" /> Export Squad
                   </button>
                   <select 
                     value={formation}
@@ -769,7 +881,7 @@ export default function VodkaJuniorsApp() {
                   {formation === 'Custom' && (
                     <input type="text" value={customFormationStr} onChange={(e) => setCustomFormationStr(e.target.value)} onBlur={handleCustomFormationBlur} placeholder="1-4-3-3" className="bg-slate-900 text-white border border-slate-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500 w-24 text-sm" />
                   )}
-                  <button onClick={() => changeMatchStatus('live')} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded-lg font-bold transition-colors shadow-md ml-auto sm:ml-0">
+                  <button onClick={() => changeMatchStatus('live')} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-1.5 rounded-lg font-bold transition-colors shadow-md ml-auto sm:ml-0">
                     <Play className="w-4 h-4 fill-current" /> Start Match
                   </button>
                 </>
@@ -784,7 +896,6 @@ export default function VodkaJuniorsApp() {
           </div>
 
           <div 
-            ref={pitchRef}
             className="relative w-full max-w-2xl mx-auto aspect-[3/4] bg-emerald-700 border-4 border-white shadow-2xl rounded-sm overflow-hidden flex flex-col-reverse justify-between py-8"
             onClick={() => { 
               if (activeSlotSearch !== null) setActiveSlotSearch(null); 
@@ -862,7 +973,7 @@ export default function VodkaJuniorsApp() {
 
                       {/* Quick Search Popover (Pre-Match Only) */}
                       {activeSlotSearch === currentSlotIndex && matchStatus === 'pre' && (
-                        <div className="absolute z-50 bg-slate-800 border border-slate-600 rounded-lg shadow-2xl p-2 w-48 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" onClick={e => e.stopPropagation()}>
+                        <div className="absolute z-50 bg-slate-800 border border-slate-600 rounded-lg shadow-2xl p-2 w-48 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" onClick={e => e.stopPropagation()} data-html2canvas-ignore>
                           <div className="flex justify-between items-center mb-2">
                             <span className="text-xs text-slate-300 font-semibold">Assign Player</span>
                             <button onClick={() => setActiveSlotSearch(null)} className="text-slate-400 hover:text-white"><X className="w-3 h-3" /></button>
@@ -888,7 +999,7 @@ export default function VodkaJuniorsApp() {
           
           {/* Player Details & Action Panel */}
           {selectedPlayerDetails && (
-            <div className={`mt-2 p-4 rounded-xl border shadow-xl flex flex-col sm:flex-row justify-between items-center gap-4 animate-in slide-in-from-bottom-4 relative transition-colors ${matchStatus === 'live' ? 'bg-indigo-900/50 border-indigo-500' : 'bg-slate-800 border-slate-700'}`}>
+            <div data-html2canvas-ignore className={`mt-2 p-4 rounded-xl border shadow-xl flex flex-col sm:flex-row justify-between items-center gap-4 animate-in slide-in-from-bottom-4 relative transition-colors ${matchStatus === 'live' ? 'bg-indigo-900/50 border-indigo-500' : 'bg-slate-800 border-slate-700'}`}>
               <div className="flex items-center gap-4 w-full sm:w-auto">
                 <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-xl shrink-0">
                   {selectedPlayerDetails.name.charAt(0)}
