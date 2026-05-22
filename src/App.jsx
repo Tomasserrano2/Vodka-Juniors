@@ -1,9 +1,7 @@
-import { toPng } from 'html-to-image';
 import React, { useState, useEffect, useRef } from 'react';
 import { Users, LayoutTemplate, Shield, Plus, X, GripVertical, CheckCircle, XCircle, Search, Download, History, Play, Square, Save, Activity, Clock, Trophy, Trash2, Edit2, Check } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
-
 
 const firebaseConfig = {
   apiKey: "AIzaSyAI1tfjgtlLqfVEfSnyhUYWIEcz_yjlTCE",
@@ -14,14 +12,13 @@ const firebaseConfig = {
   appId: "1:836406435815:web:0b10e00b5cc635a8d82742"
 };
 
-
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // Fallback data just in case Firebase is totally empty
 const INITIAL_PLAYERS = [
-  { id: '1', name: 'Alex (GK)', positions: 'GK', attendance: 12, refereeDuty: 1, goals: 0, assists: 1, performance: 8.5, available: true, mvps: 0 },
-  { id: '2', name: 'Marcus (CB)', positions: 'CB', attendance: 10, refereeDuty: 0, goals: 1, assists: 0, performance: 7.2, available: true, mvps: 0 }
+  { id: '1', name: 'Alex (GK)', positions: 'GK', attendance: 12, refereeDuty: 1, goals: 0, assists: 0, performance: 8.5, available: true, mvps: 0, yellowCards: 0, redCards: 0 },
+  { id: '2', name: 'Marcus (CB)', positions: 'CB', attendance: 10, refereeDuty: 0, goals: 1, assists: 0, performance: 7.2, available: true, mvps: 0, yellowCards: 0, redCards: 0 }
 ];
 
 const FORMATIONS = {
@@ -82,6 +79,10 @@ export default function VodkaJuniorsApp() {
   const [matchOpponent, setMatchOpponent] = useState('');
   const [matchScoreVJ, setMatchScoreVJ] = useState('');
   const [matchScoreOpp, setMatchScoreOpp] = useState('');
+  
+  // LIVE CLOCK STATES
+  const [matchStartTime, setMatchStartTime] = useState(null);
+  const [elapsedMinutes, setElapsedMinutes] = useState(0);
 
   const [benchSearchQuery, setBenchSearchQuery] = useState('');
   const [activeSlotSearch, setActiveSlotSearch] = useState(null);
@@ -90,9 +91,9 @@ export default function VodkaJuniorsApp() {
   const [dbSortOption, setDbSortOption] = useState('default');
   const [selectedPlayerDetails, setSelectedPlayerDetails] = useState(null);
   const [actionModal, setActionModal] = useState(null); 
-  const [editingHistoryId, setEditingHistoryId] = useState(null); // For inline history editing
+  const [editingHistoryId, setEditingHistoryId] = useState(null); 
   
-  const exportRef = useRef(null); // Moved ref up to wrap both bench and pitch
+  const exportRef = useRef(null); 
 
   // --- FIREBASE CONNECTIONS ---
 
@@ -139,14 +140,29 @@ export default function VodkaJuniorsApp() {
         setMatchOpponent(data.opponent || '');
         setMatchScoreVJ(data.scoreVJ || '');
         setMatchScoreOpp(data.scoreOpp || '');
+        setMatchStartTime(data.startTime || null);
       } else {
         setDoc(doc(db, "match", "currentLineup"), {
-          pitchState: {}, formation: '4-3-3', customFormationStr: '1-4-2-3', customLabels: {}, status: 'pre', events: [], ratings: {}, league: '', mvp: '', opponent: '', scoreVJ: '', scoreOpp: ''
+          pitchState: {}, formation: '4-3-3', customFormationStr: '1-4-2-3', customLabels: {}, status: 'pre', events: [], ratings: {}, league: '', mvp: '', opponent: '', scoreVJ: '', scoreOpp: '', startTime: null
         });
       }
     });
     return () => unsubscribe();
   }, []);
+
+  // --- MATCH CLOCK LOGIC ---
+  useEffect(() => {
+    let interval;
+    if (matchStatus === 'live' && matchStartTime) {
+      setElapsedMinutes(Math.floor((Date.now() - matchStartTime) / 60000));
+      interval = setInterval(() => {
+        setElapsedMinutes(Math.floor((Date.now() - matchStartTime) / 60000));
+      }, 1000);
+    } else {
+      setElapsedMinutes(0);
+    }
+    return () => clearInterval(interval);
+  }, [matchStatus, matchStartTime]);
 
   // --- ACTIONS (Write to Cloud) ---
 
@@ -179,7 +195,7 @@ export default function VodkaJuniorsApp() {
     if (matchStatus === 'live') {
       const oldPlayerId = pitchState[slotIndex];
       if (oldPlayerId && oldPlayerId !== playerId) {
-        setActionModal({ type: 'sub', playerIn: playerId, playerOut: oldPlayerId, slotIndex });
+        setActionModal({ type: 'sub', playerIn: playerId, playerOut: oldPlayerId, slotIndex, defaultMinute: elapsedMinutes });
       }
       return;
     }
@@ -208,7 +224,7 @@ export default function VodkaJuniorsApp() {
     if (matchStatus === 'live') {
         const oldPlayerId = pitchState[slotIndex];
         if (oldPlayerId && oldPlayerId !== playerId) {
-          setActionModal({ type: 'sub', playerIn: playerId, playerOut: oldPlayerId, slotIndex });
+          setActionModal({ type: 'sub', playerIn: playerId, playerOut: oldPlayerId, slotIndex, defaultMinute: elapsedMinutes });
         }
         setActiveSlotSearch(null);
         return;
@@ -228,12 +244,13 @@ export default function VodkaJuniorsApp() {
 
   const handleDragOver = (e) => e.preventDefault();
 
-const handleSaveImage = async () => {
+  const handleSaveImage = async () => {
     if (exportRef.current) {
       try {
+        const { toPng } = await import('https://esm.sh/html-to-image');
         const dataUrl = await toPng(exportRef.current, { 
           backgroundColor: '#020617', 
-          pixelRatio: 2 // Keeps it high quality!
+          pixelRatio: 2 
         });
         const link = document.createElement("a");
         link.href = dataUrl;
@@ -245,6 +262,7 @@ const handleSaveImage = async () => {
       }
     }
   };
+
   // --- MATCH ENGINE FUNCTIONS ---
 
   const changeMatchStatus = async (newStatus) => {
@@ -255,8 +273,11 @@ const handleSaveImage = async () => {
       updates.league = '';
       updates.mvp = '';
       updates.opponent = '';
-      updates.scoreVJ = '';
-      updates.scoreOpp = '';
+      updates.scoreVJ = 0;
+      updates.scoreOpp = 0;
+      updates.startTime = Date.now(); 
+    } else {
+      updates.startTime = null; 
     }
     await setDoc(doc(db, "match", "currentLineup"), updates, { merge: true });
   };
@@ -272,14 +293,18 @@ const handleSaveImage = async () => {
       const newState = { ...pitchState };
       newState[actionModal.slotIndex] = actionModal.playerIn;
       await setDoc(doc(db, "match", "currentLineup"), { events: newEvents, pitchState: newState }, { merge: true });
+    } else if (actionModal.type === 'opponentGoal') {
+      let newScoreOpp = (parseInt(matchScoreOpp) || 0) + 1;
+      await setDoc(doc(db, "match", "currentLineup"), { events: newEvents, scoreOpp: newScoreOpp }, { merge: true });
     } else {
       newEvents[newEvents.length - 1].playerId = actionModal.playerId;
-      // Auto-increment Vodka Juniors score if it's a goal and score fields are visible
-      let newScoreVJ = matchScoreVJ;
+      
       if (actionModal.type === 'goal') {
-        newScoreVJ = (parseInt(matchScoreVJ) || 0) + 1;
+        let newScoreVJ = (parseInt(matchScoreVJ) || 0) + 1;
+        await setDoc(doc(db, "match", "currentLineup"), { events: newEvents, scoreVJ: newScoreVJ }, { merge: true });
+      } else {
+        await setDoc(doc(db, "match", "currentLineup"), { events: newEvents }, { merge: true });
       }
-      await setDoc(doc(db, "match", "currentLineup"), { events: newEvents, scoreVJ: newScoreVJ }, { merge: true });
     }
     setActionModal(null);
   };
@@ -312,22 +337,24 @@ const handleSaveImage = async () => {
     await addDoc(collection(db, "pastMatches"), newMatch);
     
     // Reset back to pre-match
-    await setDoc(doc(db, "match", "currentLineup"), { status: 'pre', events: [], ratings: {}, league: '', mvp: '', opponent: '', scoreVJ: '', scoreOpp: '' }, { merge: true });
+    await setDoc(doc(db, "match", "currentLineup"), { status: 'pre', events: [], ratings: {}, league: '', mvp: '', opponent: '', scoreVJ: '', scoreOpp: '', startTime: null }, { merge: true });
     setActiveTab('history');
   };
 
   const deletePastMatch = async (matchId) => {
-    if(window.confirm('Are you sure you want to delete this match? This will recalculate all player averages and goals instantly.')) {
+    if(window.confirm('Are you sure you want to delete this match? This will recalculate all player averages, goals, and cards instantly.')) {
       await deleteDoc(doc(db, "pastMatches", matchId));
     }
   };
 
   // --- STATS ENGINE ---
   const getCalculatedStats = (player) => {
-    if (!player) return { goals: 0, assists: 0, avg: 0, mvps: 0 };
+    if (!player) return { goals: 0, assists: 0, avg: 0, mvps: 0, yellowCards: 0, redCards: 0 };
     let goals = player.goals || 0; 
     let assists = player.assists || 0; 
     let mvps = player.mvps || 0;
+    let yellowCards = player.yellowCards || 0;
+    let redCards = player.redCards || 0;
     let totalRating = (player.performance || 0) * (player.attendance || 0); 
     let ratingCount = player.attendance || 0;
 
@@ -337,6 +364,8 @@ const handleSaveImage = async () => {
            if (e.playerId === player.id) {
                if (e.type === 'goal') goals++;
                if (e.type === 'assist') assists++;
+               if (e.type === 'yellowCard') yellowCards++;
+               if (e.type === 'redCard') redCards++;
            }
        });
        if (m.ratings && m.ratings[player.id]) {
@@ -346,7 +375,7 @@ const handleSaveImage = async () => {
     });
 
     const avg = ratingCount > 0 ? (totalRating / ratingCount).toFixed(1) : (player.performance || 0);
-    return { goals, assists, avg, mvps };
+    return { goals, assists, avg, mvps, yellowCards, redCards };
   };
 
   const getDisplayName = (player) => {
@@ -357,35 +386,64 @@ const handleSaveImage = async () => {
     return firstName;
   };
 
+  const getEventText = (ev) => {
+    if (ev.type === 'opponentGoal') return <span>⚽ <strong className="text-rose-400">Opponent</strong> scored!</span>;
+    if (ev.type === 'goal') return <span>⚽ <strong className="text-emerald-400">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> scored!</span>;
+    if (ev.type === 'assist') return <span>👟 <strong className="text-indigo-300">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> assisted.</span>;
+    if (ev.type === 'yellowCard') return <span>🟨 <strong className="text-amber-400">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> booked.</span>;
+    if (ev.type === 'redCard') return <span>🟥 <strong className="text-rose-500">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> sent off!</span>;
+    if (ev.type === 'sub') return <span>🔄 <strong className="text-emerald-400">{players.find(p=>p.id===ev.playerIn)?.name || 'In'}</strong> ON, <span className="text-slate-500">{players.find(p=>p.id===ev.playerOut)?.name || 'Out'}</span> OFF</span>;
+    return null;
+  };
+
   // --- UI RENDER LOGIC ---
 
   const renderActionModal = () => {
     if (!actionModal) return null;
+    
+    let title = "Log Event";
+    if (actionModal.type === 'sub') title = "Substitution Minute";
+    else if (actionModal.type === 'opponentGoal') title = "Log Opponent Goal";
+    else if (actionModal.type === 'yellowCard') title = "Log Yellow Card";
+    else if (actionModal.type === 'redCard') title = "Log Red Card";
+    else title = `Log ${actionModal.type.charAt(0).toUpperCase() + actionModal.type.slice(1)}`;
+
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
         <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-2xl w-full max-w-sm animate-in zoom-in-95">
           <h3 className="text-xl font-bold text-white flex items-center gap-2 mb-4">
             <Clock className="w-5 h-5 text-indigo-400" />
-            {actionModal.type === 'sub' ? 'Substitution Minute' : `Log ${actionModal.type.charAt(0).toUpperCase() + actionModal.type.slice(1)}`}
+            {title}
           </h3>
           {actionModal.type === 'sub' && (
              <p className="text-sm text-slate-400 mb-4">
                Subbing <strong className="text-white">{players.find(p => p.id === actionModal.playerIn)?.name}</strong> ON for <strong className="text-white">{players.find(p => p.id === actionModal.playerOut)?.name}</strong>
              </p>
           )}
-          <input 
-            type="number" 
-            id="eventMinuteInput" 
-            placeholder="Minute (e.g. 45)"
-            className="w-full bg-slate-900 text-white p-3 rounded-lg border border-slate-600 focus:border-indigo-500 focus:outline-none mb-6 text-lg text-center" 
-            autoFocus 
-            onKeyDown={(e) => e.key === 'Enter' && processActionModal(e.target.value)}
-          />
+          {actionModal.playerId && actionModal.type !== 'sub' && (
+             <p className="text-sm text-slate-400 mb-4">
+               Player: <strong className="text-white">{players.find(p => p.id === actionModal.playerId)?.name}</strong>
+             </p>
+          )}
+          
+          <div className="mb-6 relative">
+            <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1 block">Match Minute</label>
+            <input 
+              type="number" 
+              id="eventMinuteInput" 
+              defaultValue={actionModal.defaultMinute} 
+              className="w-full bg-slate-900 text-white p-3 rounded-lg border border-slate-600 focus:border-indigo-500 focus:outline-none text-lg text-center font-bold" 
+              autoFocus 
+              onKeyDown={(e) => e.key === 'Enter' && processActionModal(e.target.value)}
+            />
+            <span className="absolute right-4 top-1/2 translate-y-1 text-slate-500 font-mono text-lg">'</span>
+          </div>
+
           <div className="flex gap-3 justify-end">
              <button onClick={() => setActionModal(null)} className="px-4 py-2 text-slate-400 hover:text-white transition-colors">Cancel</button>
              <button 
                 onClick={() => processActionModal(document.getElementById('eventMinuteInput').value)} 
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-bold transition-colors"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-bold transition-colors shadow-lg"
              >
                Save Event
              </button>
@@ -445,7 +503,7 @@ const handleSaveImage = async () => {
               onClick={() => {
                 const newId = Date.now().toString();
                 setDoc(doc(db, "players", newId), {
-                  id: newId, name: 'New Player', positions: '', attendance: 0, refereeDuty: 0, goals: 0, assists: 0, performance: 0, available: true, mvps: 0
+                  id: newId, name: 'New Player', positions: '', attendance: 0, refereeDuty: 0, goals: 0, assists: 0, performance: 0, available: true, mvps: 0, yellowCards: 0, redCards: 0
                 });
               }}
               className="w-full sm:w-auto flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors shrink-0"
@@ -454,7 +512,7 @@ const handleSaveImage = async () => {
             </button>
           </div>
         </div>
-        <table className="w-full text-left border-collapse min-w-[800px]">
+        <table className="w-full text-left border-collapse min-w-[1000px]">
           <thead>
             <tr className="bg-slate-800 text-slate-300 text-sm border-b border-slate-700">
               <th className="p-3 font-semibold">Matchday</th>
@@ -465,6 +523,8 @@ const handleSaveImage = async () => {
               <th className="p-3 font-semibold text-center text-amber-400" title="Auto-Calculated">MVP 🏆</th>
               <th className="p-3 font-semibold text-center text-indigo-300" title="Auto-Calculated">G 🔒</th>
               <th className="p-3 font-semibold text-center text-indigo-300" title="Auto-Calculated">A 🔒</th>
+              <th className="p-3 font-semibold text-center text-amber-400" title="Auto-Calculated">🟨 🔒</th>
+              <th className="p-3 font-semibold text-center text-rose-500" title="Auto-Calculated">🟥 🔒</th>
               <th className="p-3 font-semibold text-center text-emerald-400" title="Auto-Calculated">Avg 🔒</th>
             </tr>
           </thead>
@@ -505,6 +565,8 @@ const handleSaveImage = async () => {
                   <td className="p-3 text-center text-amber-400 font-bold">{stats.mvps}</td>
                   <td className="p-3 text-center text-indigo-300 font-medium">{stats.goals}</td>
                   <td className="p-3 text-center text-indigo-300 font-medium">{stats.assists}</td>
+                  <td className="p-3 text-center text-amber-400 font-medium">{stats.yellowCards}</td>
+                  <td className="p-3 text-center text-rose-500 font-medium">{stats.redCards}</td>
                   <td className="p-3 text-center text-emerald-400 font-bold">{stats.avg}</td>
                 </tr>
               );
@@ -579,9 +641,7 @@ const handleSaveImage = async () => {
                     {match.events.sort((a,b) => a.minute - b.minute).map((ev, j) => (
                       <li key={j} className="text-sm flex items-center gap-2 bg-slate-900/50 p-2 rounded border border-slate-700/50">
                         <span className="text-indigo-400 font-mono w-10">{ev.minute}'</span>
-                        {ev.type === 'goal' && <span>⚽ <strong className="text-emerald-400">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> scored!</span>}
-                        {ev.type === 'assist' && <span>👟 <strong className="text-indigo-300">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> assisted.</span>}
-                        {ev.type === 'sub' && <span>🔄 <strong className="text-emerald-400">{players.find(p=>p.id===ev.playerIn)?.name || 'In'}</strong> ON, <span className="text-slate-500">{players.find(p=>p.id===ev.playerOut)?.name || 'Out'}</span> OFF</span>}
+                        {getEventText(ev)}
                       </li>
                     ))}
                   </ul>
@@ -725,9 +785,7 @@ const handleSaveImage = async () => {
               {matchEvents.sort((a,b) => a.minute - b.minute).map((ev, j) => (
                 <div key={j} className="text-sm flex items-center gap-2">
                   <span className="text-slate-500 font-mono w-10">{ev.minute}'</span>
-                  {ev.type === 'goal' && <span>⚽ {players.find(p=>p.id===ev.playerId)?.name}</span>}
-                  {ev.type === 'assist' && <span>👟 {players.find(p=>p.id===ev.playerId)?.name}</span>}
-                  {ev.type === 'sub' && <span>🔄 {players.find(p=>p.id===ev.playerIn)?.name} in, {players.find(p=>p.id===ev.playerOut)?.name} out</span>}
+                  {getEventText(ev)}
                 </div>
               ))}
             </div>
@@ -786,7 +844,6 @@ const handleSaveImage = async () => {
     let globalSlotIndex = 0;
 
     return (
-      // Added exportRef here so the camera captures both the Bench and the Pitch
       <div ref={exportRef} className="flex flex-col lg:flex-row gap-6 bg-slate-950 p-2 sm:p-0 rounded-xl">
         {/* Bench Sidebar */}
         <div 
@@ -853,7 +910,12 @@ const handleSaveImage = async () => {
               {matchStatus === 'live' ? (
                 <>
                   <div className="w-3 h-3 bg-rose-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.8)]"></div>
-                  <div className="text-white font-bold text-lg">LIVE MATCH</div>
+                  <div className="text-white font-bold text-lg flex items-center gap-2">
+                    LIVE MATCH 
+                    <span className="bg-slate-900 text-emerald-400 px-2 py-1 rounded-md text-sm font-mono border border-indigo-500/50">
+                      ⏱ {elapsedMinutes}'
+                    </span>
+                  </div>
                 </>
               ) : (
                 <div className="text-white font-bold">Lineup Builder</div>
@@ -884,9 +946,12 @@ const handleSaveImage = async () => {
               )}
 
               {matchStatus === 'live' && (
-                <button onClick={() => changeMatchStatus('review')} className="flex items-center gap-2 bg-rose-600 hover:bg-rose-500 text-white px-4 py-1.5 rounded-lg font-bold transition-colors shadow-md w-full sm:w-auto justify-center">
-                  <Square className="w-4 h-4 fill-current" /> End Match
-                </button>
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
+                  <button onClick={() => setActionModal({type: 'opponentGoal', defaultMinute: elapsedMinutes})} className="bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/50 text-rose-400 px-3 py-1.5 rounded-lg font-bold transition-colors text-sm shadow-md">⚽ Opp. Goal</button>
+                  <button onClick={() => changeMatchStatus('review')} className="flex items-center gap-2 bg-rose-600 hover:bg-rose-500 text-white px-4 py-1.5 rounded-lg font-bold transition-colors shadow-md w-full sm:w-auto justify-center">
+                    <Square className="w-4 h-4 fill-current" /> End Match
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -1007,9 +1072,11 @@ const handleSaveImage = async () => {
               </div>
               
               {matchStatus === 'live' ? (
-                <div className="flex flex-wrap justify-center sm:justify-end gap-3 w-full sm:w-auto">
-                  <button onClick={() => setActionModal({type: 'goal', playerId: selectedPlayerDetails.id})} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg font-bold shadow-md transition-colors flex items-center gap-2">⚽ Log Goal</button>
-                  <button onClick={() => setActionModal({type: 'assist', playerId: selectedPlayerDetails.id})} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold shadow-md transition-colors flex items-center gap-2">👟 Log Assist</button>
+                <div className="flex flex-wrap justify-center sm:justify-end gap-2 w-full sm:w-auto">
+                  <button onClick={() => setActionModal({type: 'goal', playerId: selectedPlayerDetails.id, defaultMinute: elapsedMinutes})} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg font-bold shadow-md transition-colors flex items-center gap-1 text-sm">⚽ Goal</button>
+                  <button onClick={() => setActionModal({type: 'assist', playerId: selectedPlayerDetails.id, defaultMinute: elapsedMinutes})} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg font-bold shadow-md transition-colors flex items-center gap-1 text-sm">👟 Assist</button>
+                  <button onClick={() => setActionModal({type: 'yellowCard', playerId: selectedPlayerDetails.id, defaultMinute: elapsedMinutes})} className="bg-amber-500 hover:bg-amber-400 text-slate-900 px-3 py-1.5 rounded-lg font-bold shadow-md transition-colors flex items-center gap-1 text-sm">🟨 Y. Card</button>
+                  <button onClick={() => setActionModal({type: 'redCard', playerId: selectedPlayerDetails.id, defaultMinute: elapsedMinutes})} className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 rounded-lg font-bold shadow-md transition-colors flex items-center gap-1 text-sm">🟥 R. Card</button>
                 </div>
               ) : (
                 <div className="flex flex-wrap justify-center sm:justify-end gap-4 sm:gap-6 text-center w-full sm:w-auto">
@@ -1017,11 +1084,12 @@ const handleSaveImage = async () => {
                     const stats = getCalculatedStats(selectedPlayerDetails);
                     return (
                       <>
+                        <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">🟨</div><div className="font-bold text-lg text-amber-400">{stats.yellowCards}</div></div>
+                        <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">🟥</div><div className="font-bold text-lg text-rose-500">{stats.redCards}</div></div>
                         <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">MVP</div><div className="font-bold text-lg text-amber-400">{stats.mvps}</div></div>
                         <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Avg</div><div className="font-bold text-lg text-emerald-400">{stats.avg}</div></div>
                         <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Goals</div><div className="font-bold text-lg text-white">{stats.goals}</div></div>
                         <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Assists</div><div className="font-bold text-lg text-white">{stats.assists}</div></div>
-                        <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Att</div><div className="font-bold text-lg text-white">{selectedPlayerDetails.attendance}</div></div>
                       </>
                     )
                   })()}
