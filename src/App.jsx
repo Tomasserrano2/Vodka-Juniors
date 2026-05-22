@@ -1,3 +1,4 @@
+import html2canvas from 'html2canvas';
 import React, { useState, useEffect, useRef } from 'react';
 import { Users, LayoutTemplate, Shield, Plus, X, GripVertical, CheckCircle, XCircle, Search, Download, History, Play, Square, Save, Activity, Clock, Trophy, Trash2, Edit2, Check } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
@@ -227,28 +228,23 @@ export default function VodkaJuniorsApp() {
 
   const handleDragOver = (e) => e.preventDefault();
 
-  const handleSaveImage = async () => {
+const handleSaveImage = async () => {
     if (exportRef.current) {
       try {
-        if (!window.html2canvas) {
-          await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
-          });
-        }
-        // Take screenshot of the entire container (Bench + Pitch)
-        const canvas = await window.html2canvas(exportRef.current, { backgroundColor: '#020617', scale: 2 });
+        const canvas = await html2canvas(exportRef.current, { 
+          backgroundColor: '#020617', 
+          scale: 2 
+        });
         const link = document.createElement("a");
         link.href = canvas.toDataURL("image/png");
         link.download = `VodkaJuniors_Squad.png`;
         link.click();
-      } catch (err) { console.error("Error saving image:", err); }
+      } catch (err) { 
+        console.error("Error saving image:", err); 
+        alert("Oops! Something went wrong saving the image.");
+      }
     }
   };
-
   // --- MATCH ENGINE FUNCTIONS ---
 
   const changeMatchStatus = async (newStatus) => {
