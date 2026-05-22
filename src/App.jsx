@@ -1,4 +1,4 @@
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 import React, { useState, useEffect, useRef } from 'react';
 import { Users, LayoutTemplate, Shield, Plus, X, GripVertical, CheckCircle, XCircle, Search, Download, History, Play, Square, Save, Activity, Clock, Trophy, Trash2, Edit2, Check } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
@@ -231,12 +231,12 @@ export default function VodkaJuniorsApp() {
 const handleSaveImage = async () => {
     if (exportRef.current) {
       try {
-        const canvas = await html2canvas(exportRef.current, { 
+        const dataUrl = await toPng(exportRef.current, { 
           backgroundColor: '#020617', 
-          scale: 2 
+          pixelRatio: 2 // Keeps it high quality!
         });
         const link = document.createElement("a");
-        link.href = canvas.toDataURL("image/png");
+        link.href = dataUrl;
         link.download = `VodkaJuniors_Squad.png`;
         link.click();
       } catch (err) { 
