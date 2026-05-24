@@ -189,7 +189,11 @@ export default function VodkaJuniorsApp() {
   const updateMatchField = async (field, value) => {
     await setDoc(doc(db, "match", "currentLineup"), { [field]: value }, { merge: true });
   };
-
+ const updateMatchRating = async (playerId, rating) => {
+    const newRatings = { ...matchRatings, [playerId]: rating };
+    setMatchRatings(newRatings); // Optimistic update
+    await updateMatchField('ratings', newRatings);
+  };
   const handleDragStart = (e, playerId) => { e.dataTransfer.setData('playerId', playerId); };
 
   const handleDropOnPitch = async (e, slotIndex) => {
