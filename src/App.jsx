@@ -17,8 +17,8 @@ const db = getFirestore(app);
 
 // Fallback data
 const INITIAL_PLAYERS = [
-  { id: '1', name: 'Alex (GK)', positions: 'GK', attendance: 12, refereeDuty: 1, goals: 0, assists: 0, performance: 8.5, available: true, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0 },
-  { id: '2', name: 'Marcus (CB)', positions: 'CB', attendance: 10, refereeDuty: 0, goals: 1, assists: 0, performance: 7.2, available: true, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0 }
+  { id: '1', name: 'Alex (GK)', positions: 'GK', attendance: 12, refereeDuty: 1, goals: 0, assists: 0, performance: 8.5, available: true, mvps: 0, yellowCards: 0, redCards: 0 },
+  { id: '2', name: 'Marcus (CB)', positions: 'CB', attendance: 10, refereeDuty: 0, goals: 1, assists: 0, performance: 7.2, available: true, mvps: 0, yellowCards: 0, redCards: 0 }
 ];
 
 const FORMATIONS = {
@@ -81,7 +81,6 @@ export default function VodkaJuniorsApp() {
   const [matchOpponent, setMatchOpponent] = useState('');
   const [matchScoreVJ, setMatchScoreVJ] = useState('');
   const [matchScoreOpp, setMatchScoreOpp] = useState('');
-  const [matchDuration, setMatchDuration] = useState(90);
   
   // League Tracker State
   const [leagues, setLeagues] = useState([]);
@@ -97,7 +96,7 @@ export default function VodkaJuniorsApp() {
   const [selectedPlayerDetails, setSelectedPlayerDetails] = useState(null);
   const [actionModal, setActionModal] = useState(null); 
   const [editingHistoryId, setEditingHistoryId] = useState(null); 
-  const [newEvent, setNewEvent] = useState({ type: 'goal', playerId: '', playerOutId: '', minute: '' });
+  const [newEvent, setNewEvent] = useState({ type: 'goal', playerId: '', minute: '' });
   
   const exportRef = useRef(null); 
 
@@ -143,10 +142,9 @@ export default function VodkaJuniorsApp() {
         setMatchOpponent(data.opponent || '');
         setMatchScoreVJ(data.scoreVJ || '');
         setMatchScoreOpp(data.scoreOpp || '');
-        setMatchDuration(data.duration || 90);
       } else {
         setDoc(doc(db, "match", "currentLineup"), {
-          pitchState: {}, formation: '4-3-3', customFormationStr: '1-4-2-3', customLabels: {}, status: 'pre', events: [], ratings: {}, league: '', stage: 'Group Stage', mvps: [], opponent: '', scoreVJ: '', scoreOpp: '', duration: 90
+          pitchState: {}, formation: '4-3-3', customFormationStr: '1-4-2-3', customLabels: {}, status: 'pre', events: [], ratings: {}, league: '', stage: 'Group Stage', mvps: [], opponent: '', scoreVJ: '', scoreOpp: ''
         });
       }
     });
@@ -255,26 +253,22 @@ export default function VodkaJuniorsApp() {
       updates.opponent = '';
       updates.scoreVJ = 0;
       updates.scoreOpp = 0;
-      updates.duration = 90;
     }
     await setDoc(doc(db, "match", "currentLineup"), updates, { merge: true });
   };
 
   const addManualEvent = async () => {
     if (!newEvent.playerId || !newEvent.minute) return;
-    const eventToSave = { id: Date.now().toString(), type: newEvent.type, minute: parseInt(newEvent.minute) };
-    
-    if (newEvent.type === 'sub') {
-      if (!newEvent.playerOutId) return;
-      eventToSave.playerIn = newEvent.playerId;
-      eventToSave.playerOut = newEvent.playerOutId;
-    } else {
-      eventToSave.playerId = newEvent.playerId;
-    }
+    const eventToSave = { 
+        id: Date.now().toString(), 
+        type: newEvent.type, 
+        minute: parseInt(newEvent.minute),
+        playerId: newEvent.playerId 
+    };
 
     const updatedEvents = [...matchEvents, eventToSave];
     await updateMatchField('events', updatedEvents);
-    setNewEvent({ type: 'goal', playerId: '', playerOutId: '', minute: '' });
+    setNewEvent({ type: 'goal', playerId: '', minute: '' });
   };
 
   const deleteMatchEvent = async (eventId) => {
@@ -283,11 +277,7 @@ export default function VodkaJuniorsApp() {
   };
 
   const finishAndSaveMatch = async () => {
-    const playersInvolved = new Set([
-        ...Object.values(pitchState),
-        ...matchEvents.filter(e => e.type === 'sub').map(e => e.playerOut),
-        ...matchEvents.filter(e => e.type === 'sub').map(e => e.playerIn)
-    ].filter(Boolean));
+    const matchAvailablePlayers = players.filter(p => p.available);
 
     const newMatch = {
       date: new Date().toISOString(),
@@ -295,23 +285,22 @@ export default function VodkaJuniorsApp() {
       pitchState,
       events: matchEvents,
       ratings: matchRatings,
-      participated: Array.from(playersInvolved),
-      league: matchLeague, // This stores the league ID
+      participated: matchAvailablePlayers.map(p => p.id),
+      league: matchLeague,
       stage: matchStage,
       mvps: matchMvps,
       opponent: matchOpponent || 'Unknown Opponent',
       scoreVJ: matchScoreVJ || 0,
       scoreOpp: matchScoreOpp || 0,
-      duration: parseInt(matchDuration) || 90
     };
     
     await addDoc(collection(db, "pastMatches"), newMatch);
-    await setDoc(doc(db, "match", "currentLineup"), { status: 'pre', events: [], ratings: {}, league: '', stage: '', mvps: [], opponent: '', scoreVJ: '', scoreOpp: '', duration: 90 }, { merge: true });
+    await setDoc(doc(db, "match", "currentLineup"), { status: 'pre', events: [], ratings: {}, league: '', stage: '', mvps: [], opponent: '', scoreVJ: '', scoreOpp: '' }, { merge: true });
     setActiveTab('history');
   };
 
   const deletePastMatch = async (matchId) => {
-    if(window.confirm('Are you sure you want to delete this match? This will recalculate all player averages, goals, cards, and minutes instantly.')) {
+    if(window.confirm('Are you sure you want to delete this match? This will recalculate all player averages, goals, and cards instantly.')) {
       await deleteDoc(doc(db, "pastMatches", matchId));
     }
   };
@@ -406,15 +395,14 @@ export default function VodkaJuniorsApp() {
       return { standard: sorted };
   };
 
-  // --- STATS ENGINE (Includes exact minutes played) ---
+  // --- STATS ENGINE ---
   const getCalculatedStats = (player) => {
-    if (!player) return { goals: 0, assists: 0, avg: 0, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0 };
+    if (!player) return { goals: 0, assists: 0, avg: 0, mvps: 0, yellowCards: 0, redCards: 0 };
     let goals = player.goals || 0; 
     let assists = player.assists || 0; 
     let mvps = player.mvps || 0;
     let yellowCards = player.yellowCards || 0;
     let redCards = player.redCards || 0;
-    let minutes = player.minutes || 0; 
     let totalRating = (player.performance || 0) * (player.attendance || 0); 
     let ratingCount = player.attendance || 0;
 
@@ -422,15 +410,12 @@ export default function VodkaJuniorsApp() {
        if (typeof m.mvp === 'string' && m.mvp === player.id) mvps++;
        if (Array.isArray(m.mvps) && m.mvps.includes(player.id)) mvps++;
        
-       const matchLength = m.duration || 90;
-       let subs = (m.events || []).filter(e => e.type === 'sub').sort((a,b) => b.minute - a.minute); 
-       
        (m.events || []).forEach(e => {
-           if (e.playerId === player.id || e.playerIn === player.id || e.playerOut === player.id) {
-               if (e.type === 'goal' && e.playerId === player.id) goals++;
-               if (e.type === 'assist' && e.playerId === player.id) assists++;
-               if (e.type === 'yellowCard' && e.playerId === player.id) yellowCards++;
-               if (e.type === 'redCard' && e.playerId === player.id) redCards++;
+           if (e.playerId === player.id) {
+               if (e.type === 'goal') goals++;
+               if (e.type === 'assist') assists++;
+               if (e.type === 'yellowCard') yellowCards++;
+               if (e.type === 'redCard') redCards++;
            }
        });
        
@@ -438,39 +423,10 @@ export default function VodkaJuniorsApp() {
            totalRating += Number(m.ratings[player.id]);
            ratingCount++;
        }
-
-       const finalPitch = new Set(Object.values(m.pitchState || {}).filter(Boolean));
-       let currentLineup = new Set(finalPitch);
-       subs.forEach(sub => {
-           currentLineup.delete(sub.playerIn);
-           currentLineup.add(sub.playerOut);
-       });
-
-       let enteredAt = {};
-       currentLineup.forEach(pid => enteredAt[pid] = 0); 
-       
-       let playerMinsInMatch = 0;
-       const forwardSubs = [...subs].reverse(); 
-
-       forwardSubs.forEach(sub => {
-           if (sub.playerOut === player.id && enteredAt[player.id] !== undefined) {
-               playerMinsInMatch += Math.max(0, sub.minute - enteredAt[player.id]);
-               delete enteredAt[player.id];
-           }
-           if (sub.playerIn === player.id) {
-               enteredAt[player.id] = sub.minute;
-           }
-       });
-
-       if (enteredAt[player.id] !== undefined) {
-           playerMinsInMatch += Math.max(0, matchLength - enteredAt[player.id]);
-       }
-
-       minutes += playerMinsInMatch;
     });
 
     const avg = ratingCount > 0 ? (totalRating / ratingCount).toFixed(1) : (player.performance || 0);
-    return { goals, assists, avg, mvps, yellowCards, redCards, minutes };
+    return { goals, assists, avg, mvps, yellowCards, redCards };
   };
 
   const getDisplayName = (player) => {
@@ -486,7 +442,6 @@ export default function VodkaJuniorsApp() {
     if (ev.type === 'assist') return <span>👟 <strong className="text-indigo-300">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> assisted.</span>;
     if (ev.type === 'yellowCard') return <span>🟨 <strong className="text-amber-400">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> booked.</span>;
     if (ev.type === 'redCard') return <span>🟥 <strong className="text-rose-500">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> sent off!</span>;
-    if (ev.type === 'sub') return <span>🔄 <strong className="text-emerald-400">{players.find(p=>p.id===ev.playerIn)?.name || 'In'}</strong> ON, <span className="text-slate-500">{players.find(p=>p.id===ev.playerOut)?.name || 'Out'}</span> OFF</span>;
     return null;
   };
 
@@ -512,19 +467,18 @@ export default function VodkaJuniorsApp() {
               <option value="name">Sort: A-Z</option>
               <option value="performance">Sort: Avg Rating</option>
             </select>
-            <button onClick={() => setDoc(doc(db, "players", Date.now().toString()), { id: Date.now().toString(), name: 'New Player', positions: '', attendance: 0, refereeDuty: 0, goals: 0, assists: 0, performance: 0, available: true, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0 })} className="w-full sm:w-auto flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors shrink-0">
+            <button onClick={() => setDoc(doc(db, "players", Date.now().toString()), { id: Date.now().toString(), name: 'New Player', positions: '', attendance: 0, refereeDuty: 0, goals: 0, assists: 0, performance: 0, available: true, mvps: 0, yellowCards: 0, redCards: 0 })} className="w-full sm:w-auto flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors shrink-0">
               <Plus className="w-4 h-4" /> Add
             </button>
           </div>
         </div>
-        <table className="w-full text-left border-collapse min-w-[1000px]">
+        <table className="w-full text-left border-collapse min-w-[900px]">
           <thead>
             <tr className="bg-slate-800 text-slate-300 text-sm border-b border-slate-700">
               <th className="p-3 font-semibold">Matchday</th>
               <th className="p-3 font-semibold">Name</th>
               <th className="p-3 font-semibold">Position</th>
               <th className="p-3 font-semibold text-center" title="Manual">Att</th>
-              <th className="p-3 font-semibold text-center text-indigo-300" title="Auto-Calculated">Mins ⏱️</th>
               <th className="p-3 font-semibold text-center text-amber-400" title="Auto-Calculated">MVP 🏆</th>
               <th className="p-3 font-semibold text-center text-indigo-300" title="Auto-Calculated">G 🔒</th>
               <th className="p-3 font-semibold text-center text-indigo-300" title="Auto-Calculated">A 🔒</th>
@@ -546,7 +500,6 @@ export default function VodkaJuniorsApp() {
                   <td className="p-3"><SyncInput value={player.name} onSave={(val) => setDoc(doc(db, "players", player.id), { name: val }, { merge: true })} className="bg-transparent border-b border-transparent focus:border-indigo-400 focus:outline-none w-full" /></td>
                   <td className="p-3"><SyncInput value={player.positions} onSave={(val) => setDoc(doc(db, "players", player.id), { positions: val }, { merge: true })} className="bg-transparent border-b border-transparent focus:border-indigo-400 focus:outline-none w-24 text-sm" /></td>
                   <td className="p-3 text-center"><SyncInput type="number" value={player.attendance} onSave={(val) => setDoc(doc(db, "players", player.id), { attendance: val }, { merge: true })} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" /></td>
-                  <td className="p-3 text-center text-indigo-300 font-medium">{stats.minutes}'</td>
                   <td className="p-3 text-center text-amber-400 font-bold">{stats.mvps}</td>
                   <td className="p-3 text-center text-indigo-300 font-medium">{stats.goals}</td>
                   <td className="p-3 text-center text-indigo-300 font-medium">{stats.assists}</td>
@@ -606,14 +559,6 @@ export default function VodkaJuniorsApp() {
               </div>
               <div className="flex items-center gap-2 text-xs text-slate-500 mt-2">
                   <span>{new Date(match.date).toLocaleDateString()}</span>
-                  <span>•</span>
-                  {isEditing ? (
-                       <span className="flex items-center gap-1">
-                           <SyncInput type="number" value={match.duration || 90} onSave={(val) => setDoc(doc(db, "pastMatches", match.id), { duration: val }, { merge: true })} className="w-12 bg-slate-800 border border-slate-600 rounded text-center text-white p-0.5" /> mins
-                       </span>
-                  ) : (
-                       <span>{match.duration || 90}' Match</span>
-                  )}
               </div>
             </div>
             
@@ -1005,12 +950,8 @@ export default function VodkaJuniorsApp() {
   }
 
   const renderPostMatchReview = () => {
-    const playersInvolved = Array.from(new Set([
-        ...Object.values(pitchState),
-        ...matchEvents.filter(e => e.type === 'sub').map(e => e.playerOut),
-        ...matchEvents.filter(e => e.type === 'sub').map(e => e.playerIn)
-    ].filter(Boolean)));
-
+    // Only grab available players for the match
+    const matchAvailablePlayers = players.filter(p => p.available);
     const activeLeague = leagues.find(l => l.id === matchLeague);
 
     return (
@@ -1069,10 +1010,6 @@ export default function VodkaJuniorsApp() {
                  </select>
                </div>
            )}
-           <div className="w-32">
-             <label className="text-xs text-slate-500 font-bold block mb-1">Duration (mins)</label>
-             <input type="number" placeholder="90" value={matchDuration} onChange={(e) => updateMatchField('duration', parseInt(e.target.value) || 0)} className="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 focus:outline-none focus:border-indigo-500 text-center font-bold" />
-           </div>
         </div>
 
         <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 mb-6 relative overflow-hidden">
@@ -1084,28 +1021,14 @@ export default function VodkaJuniorsApp() {
                     <option value="assist">Assist</option>
                     <option value="yellowCard">Yellow Card</option>
                     <option value="redCard">Red Card</option>
-                    <option value="sub">Substitution</option>
                  </select>
                  <input type="number" placeholder="Min" value={newEvent.minute} onChange={e => setNewEvent({...newEvent, minute: e.target.value})} className="w-14 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-center text-xs focus:border-indigo-500" />
                </div>
                <div className="flex gap-2">
-                 {newEvent.type === 'sub' ? (
-                    <>
-                      <select value={newEvent.playerId} onChange={e => setNewEvent({...newEvent, playerId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
-                        <option value="">Player IN...</option>
-                        {players.filter(p => p.available).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                      <select value={newEvent.playerOutId} onChange={e => setNewEvent({...newEvent, playerOutId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
-                        <option value="">Player OUT...</option>
-                        {playersInvolved.map(pid => { const p = players.find(x => x.id === pid); return p ? <option key={pid} value={pid}>{p.name}</option> : null; })}
-                      </select>
-                    </>
-                 ) : (
-                    <select value={newEvent.playerId} onChange={e => setNewEvent({...newEvent, playerId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
-                      <option value="">Select Player...</option>
-                      {playersInvolved.map(pid => { const p = players.find(x => x.id === pid); return p ? <option key={pid} value={pid}>{p.name}</option> : null; })}
-                    </select>
-                 )}
+                  <select value={newEvent.playerId} onChange={e => setNewEvent({...newEvent, playerId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
+                    <option value="">Select Player...</option>
+                    {matchAvailablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
                  <button onClick={addManualEvent} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 rounded font-bold shadow-md transition-colors text-xs">Add</button>
                </div>
             </div>
@@ -1140,20 +1063,18 @@ export default function VodkaJuniorsApp() {
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700">
-                    {playersInvolved.map(pid => {
-                        const player = players.find(p => p.id === pid);
-                        if (!player) return null;
+                    {matchAvailablePlayers.map(player => {
                         return (
-                            <tr key={pid} className="hover:bg-slate-800 transition-colors">
+                            <tr key={player.id} className="hover:bg-slate-800 transition-colors">
                                 <td className="p-3 text-slate-300 font-medium">{player.name}</td>
                                 <td className="p-3 text-center">
-                                    <input type="number" step="0.1" max="10" min="1" placeholder="-" value={matchRatings[pid] || ''} onChange={(e) => updateMatchRating(pid, e.target.value)} className="w-16 bg-slate-800 border border-slate-600 text-emerald-400 font-bold rounded p-1 text-center focus:outline-none focus:border-emerald-500" />
+                                    <input type="number" step="0.1" max="10" min="1" placeholder="-" value={matchRatings[player.id] || ''} onChange={(e) => updateMatchRating(player.id, e.target.value)} className="w-16 bg-slate-800 border border-slate-600 text-emerald-400 font-bold rounded p-1 text-center focus:outline-none focus:border-emerald-500" />
                                 </td>
                                 <td className="p-3 text-center">
-                                    <input type="checkbox" checked={matchMvps.includes(pid)} onChange={(e) => {
+                                    <input type="checkbox" checked={matchMvps.includes(player.id)} onChange={(e) => {
                                         let newMvps = [...matchMvps];
-                                        if (e.target.checked) newMvps.push(pid);
-                                        else newMvps = newMvps.filter(id => id !== pid);
+                                        if (e.target.checked) newMvps.push(player.id);
+                                        else newMvps = newMvps.filter(id => id !== player.id);
                                         updateMatchField('mvps', newMvps);
                                     }} className="w-5 h-5 accent-amber-500 bg-slate-800 border-slate-600 rounded cursor-pointer" />
                                 </td>
@@ -1223,7 +1144,6 @@ export default function VodkaJuniorsApp() {
                   </div>
                   <div className="text-xs text-slate-400 flex flex-col items-end">
                       <span className="text-emerald-400 font-bold">Avg: {stats.avg}</span>
-                      <span>Mins: {stats.minutes}'</span>
                   </div>
                 </div>
               )})
@@ -1339,7 +1259,6 @@ export default function VodkaJuniorsApp() {
                     const stats = getCalculatedStats(selectedPlayerDetails);
                     return (
                       <>
-                        <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Mins</div><div className="font-bold text-lg text-indigo-300">{stats.minutes}'</div></div>
                         <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Avg</div><div className="font-bold text-lg text-emerald-400">{stats.avg}</div></div>
                         <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Goals</div><div className="font-bold text-lg text-white">{stats.goals}</div></div>
                         <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Assists</div><div className="font-bold text-lg text-white">{stats.assists}</div></div>
