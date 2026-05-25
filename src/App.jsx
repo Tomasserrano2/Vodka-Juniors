@@ -2862,24 +2862,7 @@ export default function VodkaJuniorsApp() {
                       </div>
                     </div>
                     <div className="text-xs text-slate-400 flex flex-col items-end">
-                      <span className="text-emerald-400 font-bold">
-                        Avg: {stats.avg}
-                      </span>
-                      <span>
-                        <SyncInput
-                          type="number"
-                          value={player.minutes || 0}
-                          onSave={(val) =>
-                            setDoc(
-                              doc(db, "players", player.id),
-                              { minutes: parseInt(val) || 0 },
-                              { merge: true },
-                            )
-                          }
-                          className="w-12 bg-slate-800 border border-slate-700 rounded p-1 text-center text-indigo-300 text-sm"
-                        />
-                        '
-                      </span>
+                      <span className="text-indigo-300 font-semibold truncate">{player.positions}</span>
                     </div>
                   </div>
                 );
