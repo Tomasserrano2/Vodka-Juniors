@@ -2765,12 +2765,26 @@ export default function VodkaJuniorsApp() {
           </table>
         </div>
 
-        <button
-          onClick={finishAndSaveMatch}
-          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-lg"
-        >
-          <Save className="w-5 h-5" /> Save Match to History
-        </button>
+        {/* Actions Container */}
+          <div className="flex flex-col sm:flex-row gap-3 mt-4">
+            <button
+              onClick={() => {
+                if (window.confirm("Are you sure you want to cancel the match review? Your changes won't be saved.")) {
+                  changeMatchStatus("pre");
+                }
+              }}
+              className="flex-1 bg-slate-700 hover:bg-rose-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-md"
+            >
+              <X className="w-5 h-5" /> Cancel Review
+            </button>
+            
+            <button
+              onClick={finishAndSaveMatch}
+              className="flex-2 sm:w-2/3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-lg"
+            >
+              <Save className="w-5 h-5" /> Save Match to History
+            </button>
+          </div>
       </div>
     );
   };
