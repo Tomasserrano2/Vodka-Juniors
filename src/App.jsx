@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, LayoutTemplate, Shield, Plus, X, GripVertical, CheckCircle, XCircle, Search, Download, History, Play, Square, Save, Activity, Clock, Trophy, Trash2, Edit2, Check, TableProperties, Swords } from 'lucide-react';
+import { Users, LayoutTemplate, Shield, Plus, X, GripVertical, CheckCircle, XCircle, Search, Download, History, Play, Square, Save, Activity, Clock, Trophy, Trash2, Edit2, Check, TableProperties, Swords, MessageSquare } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
 
@@ -17,8 +17,8 @@ const db = getFirestore(app);
 
 // Fallback data
 const INITIAL_PLAYERS = [
-  { id: '1', name: 'Alex (GK)', positions: 'GK', attendance: 12, refereeDuty: 1, goals: 0, assists: 0, performance: 8.5, available: true, mvps: 0, yellowCards: 0, redCards: 0 },
-  { id: '2', name: 'Marcus (CB)', positions: 'CB', attendance: 10, refereeDuty: 0, goals: 1, assists: 0, performance: 7.2, available: true, mvps: 0, yellowCards: 0, redCards: 0 }
+  { id: '1', name: 'Alex (GK)', positions: 'GK', attendance: 12, refereeDuty: 1, goals: 0, assists: 0, performance: 8.5, available: true, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0, comments: 'Solid shot stopper' },
+  { id: '2', name: 'Marcus (CB)', positions: 'CB', attendance: 10, refereeDuty: 0, goals: 1, assists: 0, performance: 7.2, available: true, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0, comments: 'Needs to work on passing' }
 ];
 
 const FORMATIONS = {
@@ -51,7 +51,7 @@ const SyncInput = ({ value, onSave, type = "text", className, step, onClick, pla
     <input 
       type={type} 
       step={step}
-      value={localVal} 
+      value={localVal || ''} 
       onChange={(e) => setLocalVal(e.target.value)} 
       onBlur={handleBlur}
       onClick={onClick}
@@ -77,10 +77,12 @@ export default function VodkaJuniorsApp() {
   const [matchRatings, setMatchRatings] = useState({}); 
   const [matchLeague, setMatchLeague] = useState('');
   const [matchStage, setMatchStage] = useState('Group Stage');
+  const [matchdayWeek, setMatchdayWeek] = useState(1);
   const [matchMvps, setMatchMvps] = useState([]); 
   const [matchOpponent, setMatchOpponent] = useState('');
   const [matchScoreVJ, setMatchScoreVJ] = useState('');
   const [matchScoreOpp, setMatchScoreOpp] = useState('');
+  const [matchDuration, setMatchDuration] = useState(90);
   
   // League Tracker State
   const [leagues, setLeagues] = useState([]);
@@ -94,9 +96,8 @@ export default function VodkaJuniorsApp() {
   const [dbSearchQuery, setDbSearchQuery] = useState('');
   const [dbSortOption, setDbSortOption] = useState('default');
   const [selectedPlayerDetails, setSelectedPlayerDetails] = useState(null);
-  const [actionModal, setActionModal] = useState(null); 
   const [editingHistoryId, setEditingHistoryId] = useState(null); 
-  const [newEvent, setNewEvent] = useState({ type: 'goal', playerId: '', minute: '' });
+  const [newEvent, setNewEvent] = useState({ type: 'goal', playerId: '', playerOutId: '', minute: '' });
   
   const exportRef = useRef(null); 
 
@@ -138,13 +139,15 @@ export default function VodkaJuniorsApp() {
         setMatchRatings(data.ratings || {});
         setMatchLeague(data.league || '');
         setMatchStage(data.stage || 'Group Stage');
+        setMatchdayWeek(data.matchdayWeek || 1);
         setMatchMvps(data.mvps || []);
         setMatchOpponent(data.opponent || '');
         setMatchScoreVJ(data.scoreVJ || '');
         setMatchScoreOpp(data.scoreOpp || '');
+        setMatchDuration(data.duration || 90);
       } else {
         setDoc(doc(db, "match", "currentLineup"), {
-          pitchState: {}, formation: '4-3-3', customFormationStr: '1-4-2-3', customLabels: {}, status: 'pre', events: [], ratings: {}, league: '', stage: 'Group Stage', mvps: [], opponent: '', scoreVJ: '', scoreOpp: ''
+          pitchState: {}, formation: '4-3-3', customFormationStr: '1-4-2-3', customLabels: {}, status: 'pre', events: [], ratings: {}, league: '', stage: 'Group Stage', matchdayWeek: 1, mvps: [], opponent: '', scoreVJ: '', scoreOpp: '', duration: 90
         });
       }
     });
@@ -189,11 +192,13 @@ export default function VodkaJuniorsApp() {
   const updateMatchField = async (field, value) => {
     await setDoc(doc(db, "match", "currentLineup"), { [field]: value }, { merge: true });
   };
- const updateMatchRating = async (playerId, rating) => {
-    const newRatings = { ...matchRatings, [playerId]: rating };
-    setMatchRatings(newRatings); // Optimistic update
-    await updateMatchField('ratings', newRatings);
+
+  const handleClearLineup = async () => {
+    if (window.confirm("Are you sure you want to clear the entire lineup?")) {
+        await setDoc(doc(db, "match", "currentLineup"), { pitchState: {} }, { merge: true });
+    }
   };
+
   const handleDragStart = (e, playerId) => { e.dataTransfer.setData('playerId', playerId); };
 
   const handleDropOnPitch = async (e, slotIndex) => {
@@ -251,28 +256,38 @@ export default function VodkaJuniorsApp() {
       const activeLeague = leagues.find(l => l.id === selectedLeagueId);
       updates.league = activeLeague ? activeLeague.id : ''; 
       updates.stage = 'Group Stage';
+      updates.matchdayWeek = 1;
       updates.events = [];
       updates.ratings = {};
       updates.mvps = [];
       updates.opponent = '';
       updates.scoreVJ = 0;
       updates.scoreOpp = 0;
+      updates.duration = 90;
     }
     await setDoc(doc(db, "match", "currentLineup"), updates, { merge: true });
   };
 
+  const updateMatchRating = async (playerId, rating) => {
+    const newRatings = { ...matchRatings, [playerId]: parseFloat(rating) || 0 };
+    await setDoc(doc(db, "match", "currentLineup"), { ratings: newRatings }, { merge: true });
+  };
+
   const addManualEvent = async () => {
     if (!newEvent.playerId || !newEvent.minute) return;
-    const eventToSave = { 
-        id: Date.now().toString(), 
-        type: newEvent.type, 
-        minute: parseInt(newEvent.minute),
-        playerId: newEvent.playerId 
-    };
+    const eventToSave = { id: Date.now().toString(), type: newEvent.type, minute: parseInt(newEvent.minute) };
+    
+    if (newEvent.type === 'sub') {
+      if (!newEvent.playerOutId) return;
+      eventToSave.playerIn = newEvent.playerId;
+      eventToSave.playerOut = newEvent.playerOutId;
+    } else {
+      eventToSave.playerId = newEvent.playerId;
+    }
 
     const updatedEvents = [...matchEvents, eventToSave];
     await updateMatchField('events', updatedEvents);
-    setNewEvent({ type: 'goal', playerId: '', minute: '' });
+    setNewEvent({ type: 'goal', playerId: '', playerOutId: '', minute: '' });
   };
 
   const deleteMatchEvent = async (eventId) => {
@@ -281,7 +296,11 @@ export default function VodkaJuniorsApp() {
   };
 
   const finishAndSaveMatch = async () => {
-    const matchAvailablePlayers = players.filter(p => p.available);
+    const playersInvolved = new Set([
+        ...Object.values(pitchState),
+        ...matchEvents.filter(e => e.type === 'sub').map(e => e.playerOut),
+        ...matchEvents.filter(e => e.type === 'sub').map(e => e.playerIn)
+    ].filter(Boolean));
 
     const newMatch = {
       date: new Date().toISOString(),
@@ -289,22 +308,24 @@ export default function VodkaJuniorsApp() {
       pitchState,
       events: matchEvents,
       ratings: matchRatings,
-      participated: matchAvailablePlayers.map(p => p.id),
+      participated: Array.from(playersInvolved),
       league: matchLeague,
       stage: matchStage,
+      matchdayWeek: parseInt(matchdayWeek) || 1,
       mvps: matchMvps,
       opponent: matchOpponent || 'Unknown Opponent',
       scoreVJ: matchScoreVJ || 0,
       scoreOpp: matchScoreOpp || 0,
+      duration: parseInt(matchDuration) || 90
     };
     
     await addDoc(collection(db, "pastMatches"), newMatch);
-    await setDoc(doc(db, "match", "currentLineup"), { status: 'pre', events: [], ratings: {}, league: '', stage: '', mvps: [], opponent: '', scoreVJ: '', scoreOpp: '' }, { merge: true });
+    await setDoc(doc(db, "match", "currentLineup"), { status: 'pre', events: [], ratings: {}, league: '', stage: '', matchdayWeek: 1, mvps: [], opponent: '', scoreVJ: '', scoreOpp: '', duration: 90 }, { merge: true });
     setActiveTab('history');
   };
 
   const deletePastMatch = async (matchId) => {
-    if(window.confirm('Are you sure you want to delete this match? This will recalculate all player averages, goals, and cards instantly.')) {
+    if(window.confirm('Are you sure you want to delete this match? This will recalculate all player averages, goals, cards, and minutes instantly.')) {
       await deleteDoc(doc(db, "pastMatches", matchId));
     }
   };
@@ -339,10 +360,10 @@ export default function VodkaJuniorsApp() {
       }
   };
 
-  const addOtherMatchResult = async (leagueId, team1, score1, score2, team2, stage) => {
+  const addOtherMatchResult = async (leagueId, team1, score1, score2, team2, stage, week) => {
       if (!team1 || !team2 || team1 === team2 || score1 === '' || score2 === '') return;
       await addDoc(collection(db, "leagueMatches"), {
-          leagueId, team1, team2, score1: parseInt(score1), score2: parseInt(score2), stage: stage || 'Group Stage', date: new Date().toISOString()
+          leagueId, team1, team2, score1: parseInt(score1), score2: parseInt(score2), stage: stage || 'Group Stage', matchdayWeek: parseInt(week) || 1, date: new Date().toISOString()
       });
   };
 
@@ -356,7 +377,6 @@ export default function VodkaJuniorsApp() {
           standings[t.name] = { name: t.name, group: t.group, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 };
       });
 
-      // Inject VJ Matches from Match History matching this league and NOT knockout stages
       pastMatches.filter(m => m.league === league.id && (!m.stage || m.stage.includes('Group'))).forEach(m => {
           const vj = 'Vodka Juniors';
           const opp = m.opponent;
@@ -374,7 +394,6 @@ export default function VodkaJuniorsApp() {
           else { standings[vj].d++; standings[opp].d++; standings[vj].pts++; standings[opp].pts++; }
       });
 
-      // Inject other manual matches
       leagueMatches.filter(m => m.leagueId === league.id && (!m.stage || m.stage.includes('Group'))).forEach(m => {
           if (!standings[m.team1]) standings[m.team1] = { name: m.team1, group: 'A', p:0, w:0, d:0, l:0, gf:0, ga:0, gd:0, pts:0 };
           if (!standings[m.team2]) standings[m.team2] = { name: m.team2, group: 'A', p:0, w:0, d:0, l:0, gf:0, ga:0, gd:0, pts:0 };
@@ -399,14 +418,15 @@ export default function VodkaJuniorsApp() {
       return { standard: sorted };
   };
 
-  // --- STATS ENGINE ---
+  // --- STATS ENGINE (Includes exact minutes played) ---
   const getCalculatedStats = (player) => {
-    if (!player) return { goals: 0, assists: 0, avg: 0, mvps: 0, yellowCards: 0, redCards: 0 };
+    if (!player) return { goals: 0, assists: 0, avg: 0, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0 };
     let goals = player.goals || 0; 
     let assists = player.assists || 0; 
     let mvps = player.mvps || 0;
     let yellowCards = player.yellowCards || 0;
     let redCards = player.redCards || 0;
+    let minutes = player.minutes || 0; 
     let totalRating = (player.performance || 0) * (player.attendance || 0); 
     let ratingCount = player.attendance || 0;
 
@@ -414,12 +434,15 @@ export default function VodkaJuniorsApp() {
        if (typeof m.mvp === 'string' && m.mvp === player.id) mvps++;
        if (Array.isArray(m.mvps) && m.mvps.includes(player.id)) mvps++;
        
+       const matchLength = m.duration || 90;
+       let subs = (m.events || []).filter(e => e.type === 'sub').sort((a,b) => b.minute - a.minute); 
+       
        (m.events || []).forEach(e => {
-           if (e.playerId === player.id) {
-               if (e.type === 'goal') goals++;
-               if (e.type === 'assist') assists++;
-               if (e.type === 'yellowCard') yellowCards++;
-               if (e.type === 'redCard') redCards++;
+           if (e.playerId === player.id || e.playerIn === player.id || e.playerOut === player.id) {
+               if (e.type === 'goal' && e.playerId === player.id) goals++;
+               if (e.type === 'assist' && e.playerId === player.id) assists++;
+               if (e.type === 'yellowCard' && e.playerId === player.id) yellowCards++;
+               if (e.type === 'redCard' && e.playerId === player.id) redCards++;
            }
        });
        
@@ -427,10 +450,42 @@ export default function VodkaJuniorsApp() {
            totalRating += Number(m.ratings[player.id]);
            ratingCount++;
        }
+
+       // Only calculate minutes if they actually participated
+       if (m.participated && m.participated.includes(player.id)) {
+           const finalPitch = new Set(Object.values(m.pitchState || {}).filter(Boolean));
+           let currentLineup = new Set(finalPitch);
+           subs.forEach(sub => {
+               currentLineup.delete(sub.playerIn);
+               currentLineup.add(sub.playerOut);
+           });
+
+           let enteredAt = {};
+           currentLineup.forEach(pid => enteredAt[pid] = 0); 
+           
+           let playerMinsInMatch = 0;
+           const forwardSubs = [...subs].reverse(); 
+
+           forwardSubs.forEach(sub => {
+               if (sub.playerOut === player.id && enteredAt[player.id] !== undefined) {
+                   playerMinsInMatch += Math.max(0, sub.minute - enteredAt[player.id]);
+                   delete enteredAt[player.id];
+               }
+               if (sub.playerIn === player.id) {
+                   enteredAt[player.id] = sub.minute;
+               }
+           });
+
+           if (enteredAt[player.id] !== undefined) {
+               playerMinsInMatch += Math.max(0, matchLength - enteredAt[player.id]);
+           }
+
+           minutes += playerMinsInMatch;
+       }
     });
 
     const avg = ratingCount > 0 ? (totalRating / ratingCount).toFixed(1) : (player.performance || 0);
-    return { goals, assists, avg, mvps, yellowCards, redCards };
+    return { goals, assists, avg, mvps, yellowCards, redCards, minutes };
   };
 
   const getDisplayName = (player) => {
@@ -446,6 +501,7 @@ export default function VodkaJuniorsApp() {
     if (ev.type === 'assist') return <span>👟 <strong className="text-indigo-300">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> assisted.</span>;
     if (ev.type === 'yellowCard') return <span>🟨 <strong className="text-amber-400">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> booked.</span>;
     if (ev.type === 'redCard') return <span>🟥 <strong className="text-rose-500">{players.find(p=>p.id===ev.playerId)?.name || 'Unknown'}</strong> sent off!</span>;
+    if (ev.type === 'sub') return <span>🔄 <strong className="text-emerald-400">{players.find(p=>p.id===ev.playerIn)?.name || 'In'}</strong> ON, <span className="text-slate-500">{players.find(p=>p.id===ev.playerOut)?.name || 'Out'}</span> OFF</span>;
     return null;
   };
 
@@ -471,24 +527,27 @@ export default function VodkaJuniorsApp() {
               <option value="name">Sort: A-Z</option>
               <option value="performance">Sort: Avg Rating</option>
             </select>
-            <button onClick={() => setDoc(doc(db, "players", Date.now().toString()), { id: Date.now().toString(), name: 'New Player', positions: '', attendance: 0, refereeDuty: 0, goals: 0, assists: 0, performance: 0, available: true, mvps: 0, yellowCards: 0, redCards: 0 })} className="w-full sm:w-auto flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors shrink-0">
+            <button onClick={() => setDoc(doc(db, "players", Date.now().toString()), { id: Date.now().toString(), name: 'New Player', positions: '', attendance: 0, refereeDuty: 0, goals: 0, assists: 0, performance: 0, available: true, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0, comments: '' })} className="w-full sm:w-auto flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors shrink-0">
               <Plus className="w-4 h-4" /> Add
             </button>
           </div>
         </div>
-        <table className="w-full text-left border-collapse min-w-[900px]">
+        <table className="w-full text-left border-collapse min-w-[1300px]">
           <thead>
             <tr className="bg-slate-800 text-slate-300 text-sm border-b border-slate-700">
               <th className="p-3 font-semibold">Matchday</th>
               <th className="p-3 font-semibold">Name</th>
               <th className="p-3 font-semibold">Position</th>
               <th className="p-3 font-semibold text-center" title="Manual">Att</th>
+              <th className="p-3 font-semibold text-center" title="Manual">Ref</th>
+              <th className="p-3 font-semibold text-center text-indigo-300" title="Auto-Calculated">Mins ⏱️</th>
               <th className="p-3 font-semibold text-center text-amber-400" title="Auto-Calculated">MVP 🏆</th>
               <th className="p-3 font-semibold text-center text-indigo-300" title="Auto-Calculated">G 🔒</th>
               <th className="p-3 font-semibold text-center text-indigo-300" title="Auto-Calculated">A 🔒</th>
               <th className="p-3 font-semibold text-center text-amber-400" title="Auto-Calculated">🟨 🔒</th>
               <th className="p-3 font-semibold text-center text-rose-500" title="Auto-Calculated">🟥 🔒</th>
               <th className="p-3 font-semibold text-center text-emerald-400" title="Auto-Calculated">Avg 🔒</th>
+              <th className="p-3 font-semibold"><div className="flex items-center gap-1"><MessageSquare className="w-4 h-4"/> Comments</div></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-700 text-slate-200">
@@ -504,12 +563,17 @@ export default function VodkaJuniorsApp() {
                   <td className="p-3"><SyncInput value={player.name} onSave={(val) => setDoc(doc(db, "players", player.id), { name: val }, { merge: true })} className="bg-transparent border-b border-transparent focus:border-indigo-400 focus:outline-none w-full" /></td>
                   <td className="p-3"><SyncInput value={player.positions} onSave={(val) => setDoc(doc(db, "players", player.id), { positions: val }, { merge: true })} className="bg-transparent border-b border-transparent focus:border-indigo-400 focus:outline-none w-24 text-sm" /></td>
                   <td className="p-3 text-center"><SyncInput type="number" value={player.attendance} onSave={(val) => setDoc(doc(db, "players", player.id), { attendance: val }, { merge: true })} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" /></td>
+                  <td className="p-3 text-center"><SyncInput type="number" value={player.refereeDuty || 0} onSave={(val) => setDoc(doc(db, "players", player.id), { refereeDuty: val }, { merge: true })} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" /></td>
+                  <td className="p-3 text-center text-indigo-300 font-medium">{stats.minutes}'</td>
                   <td className="p-3 text-center text-amber-400 font-bold">{stats.mvps}</td>
                   <td className="p-3 text-center text-indigo-300 font-medium">{stats.goals}</td>
                   <td className="p-3 text-center text-indigo-300 font-medium">{stats.assists}</td>
                   <td className="p-3 text-center text-amber-400 font-medium">{stats.yellowCards}</td>
                   <td className="p-3 text-center text-rose-500 font-medium">{stats.redCards}</td>
                   <td className="p-3 text-center text-emerald-400 font-bold">{stats.avg}</td>
+                  <td className="p-3 pr-6">
+                    <SyncInput value={player.comments || ''} onSave={(val) => setDoc(doc(db, "players", player.id), { comments: val }, { merge: true })} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none w-full" placeholder="Add notes..." />
+                  </td>
                 </tr>
               );
             })}
@@ -540,7 +604,7 @@ export default function VodkaJuniorsApp() {
             <div className="flex flex-col mb-4 border-b border-slate-700 pb-4">
               <div className="flex items-center gap-2 mb-2">
                 <History className="w-5 h-5 text-indigo-400" />
-                <h3 className="text-sm font-bold text-indigo-300 uppercase tracking-wider">{leagueName} {match.stage && `- ${match.stage}`}</h3>
+                <h3 className="text-sm font-bold text-indigo-300 uppercase tracking-wider">{leagueName} {match.stage && `- ${match.stage}`} {match.matchdayWeek && `(Week ${match.matchdayWeek})`}</h3>
                 <span className="bg-indigo-600/20 text-indigo-400 px-3 py-0.5 rounded-full text-xs font-bold ml-2">{match.formation}</span>
               </div>
               
@@ -563,6 +627,14 @@ export default function VodkaJuniorsApp() {
               </div>
               <div className="flex items-center gap-2 text-xs text-slate-500 mt-2">
                   <span>{new Date(match.date).toLocaleDateString()}</span>
+                  <span>•</span>
+                  {isEditing ? (
+                       <span className="flex items-center gap-1">
+                           <SyncInput type="number" value={match.duration || 90} onSave={(val) => setDoc(doc(db, "pastMatches", match.id), { duration: val }, { merge: true })} className="w-12 bg-slate-800 border border-slate-600 rounded text-center text-white p-0.5" /> mins
+                       </span>
+                  ) : (
+                       <span>{match.duration || 90}' Match</span>
+                  )}
               </div>
             </div>
             
@@ -629,6 +701,19 @@ export default function VodkaJuniorsApp() {
 
   const renderLeagueTab = () => {
     const currentLeague = leagues.find(l => l.id === selectedLeagueId);
+    
+    // Calculate all matches for this specific league
+    const allLeagueGames = [
+       ...pastMatches.filter(m => m.league === currentLeague?.id).map(m => ({
+           id: m.id, team1: 'Vodka Juniors', team2: m.opponent, score1: m.scoreVJ, score2: m.scoreOpp, stage: m.stage, matchdayWeek: m.matchdayWeek || 1, isVJ: true, date: m.date
+       })),
+       ...leagueMatches.filter(m => m.leagueId === currentLeague?.id).map(m => ({
+           id: m.id, team1: m.team1, team2: m.team2, score1: m.score1, score2: m.score2, stage: m.stage, matchdayWeek: m.matchdayWeek || 1, isVJ: false, date: m.date
+       }))
+    ];
+    
+    // Extract unique matchdays for grouped view
+    const matchdays = [...new Set(allLeagueGames.map(m => m.matchdayWeek))].sort((a,b) => b - a);
 
     return (
         <div className="space-y-6">
@@ -714,13 +799,19 @@ export default function VodkaJuniorsApp() {
                         <h3 className="text-emerald-400 font-bold mb-3 border-b border-slate-700 pb-2">Log Other Match Result</h3>
                         <p className="text-xs text-slate-400 mb-4">Input results between two other teams to update the table.</p>
                         
-                        {currentLeague.format === 'groups' && (
-                            <select id="stageSelect" className="w-full mb-2 bg-slate-900 text-white border border-slate-600 rounded p-2 text-sm focus:outline-none focus:border-emerald-500">
-                                <option value="Group Stage">Group Stage</option>
-                                <option value="Semi-Final">Semi-Final</option>
-                                <option value="Final">Final</option>
-                            </select>
-                        )}
+                        <div className="flex gap-2 mb-2">
+                            {currentLeague.format === 'groups' && (
+                                <select id="stageSelect" className="flex-1 bg-slate-900 text-white border border-slate-600 rounded p-2 text-sm focus:outline-none focus:border-emerald-500">
+                                    <option value="Group Stage">Group Stage</option>
+                                    <option value="Semi-Final">Semi-Final</option>
+                                    <option value="Final">Final</option>
+                                </select>
+                            )}
+                            <div className="flex items-center gap-2 bg-slate-900 border border-slate-600 rounded p-2 text-sm">
+                                <span className="text-slate-400">Matchday/Week:</span>
+                                <input type="number" id="matchdayWeekInput" defaultValue="1" className="w-12 bg-transparent text-white focus:outline-none focus:text-emerald-400 font-bold" />
+                            </div>
+                        </div>
                         
                         <div className="flex items-center justify-between gap-2 bg-slate-900 p-3 rounded-lg border border-slate-700">
                             <select id="team1Select" className="w-1/3 bg-slate-800 text-white border border-slate-600 rounded p-2 text-xs sm:text-sm focus:outline-none focus:border-emerald-500">
@@ -739,30 +830,51 @@ export default function VodkaJuniorsApp() {
                         </div>
                         <button onClick={() => {
                             const stg = currentLeague.format === 'groups' ? document.getElementById('stageSelect').value : 'League Match';
+                            const wk = document.getElementById('matchdayWeekInput').value;
                             addOtherMatchResult(
                                 currentLeague.id,
                                 document.getElementById('team1Select').value, document.getElementById('score1Input').value,
-                                document.getElementById('score2Input').value, document.getElementById('team2Select').value, stg
+                                document.getElementById('score2Input').value, document.getElementById('team2Select').value, stg, wk
                             );
                             document.getElementById('team1Select').value = ''; document.getElementById('score1Input').value = '';
                             document.getElementById('score2Input').value = ''; document.getElementById('team2Select').value = '';
                         }} className="w-full mt-3 bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-lg font-bold transition-colors shadow-lg">Save Result</button>
-                        
-                        {leagueMatches.filter(m => m.leagueId === currentLeague.id).length > 0 && (
-                            <div className="mt-4 max-h-32 overflow-y-auto custom-scrollbar space-y-1">
-                                {leagueMatches.filter(m => m.leagueId === currentLeague.id).sort((a,b) => new Date(b.date) - new Date(a.date)).map(m => (
-                                    <div key={m.id} className="flex justify-between items-center text-xs bg-slate-800 p-2 rounded border border-slate-700/50 text-slate-300">
-                                        <div className="flex flex-col">
-                                           <span className="text-[10px] text-emerald-400/80 font-bold uppercase">{m.stage}</span>
-                                           <span>{m.team1} <strong className="text-white">{m.score1} - {m.score2}</strong> {m.team2}</span>
-                                        </div>
-                                        <button onClick={() => deleteOtherMatchResult(m.id)} className="text-slate-500 hover:text-rose-400"><Trash2 className="w-3 h-3"/></button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
                     </div>
                 </div>
+
+                {/* MATCHDAY RESULTS ACCORDION */}
+                {matchdays.length > 0 && (
+                   <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700 p-6">
+                      <div className="flex items-center gap-2 mb-4 border-b border-slate-700 pb-2">
+                         <Activity className="w-5 h-5 text-indigo-400" />
+                         <h3 className="text-xl font-bold text-white">Results by Matchday</h3>
+                      </div>
+                      <div className="space-y-6">
+                          {matchdays.map(week => (
+                              <div key={week}>
+                                  <h4 className="text-slate-400 font-bold uppercase tracking-wider mb-2 text-sm">Matchday {week}</h4>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                      {allLeagueGames.filter(m => m.matchdayWeek === week).map(m => (
+                                          <div key={m.id} className="flex justify-between items-center text-sm bg-slate-900 p-3 rounded-lg border border-slate-700 shadow-sm text-slate-300">
+                                              <div className="flex flex-col flex-1">
+                                                 {m.stage && m.stage !== 'League Match' && <span className="text-[10px] text-emerald-400/80 font-bold uppercase mb-1">{m.stage}</span>}
+                                                 <div className="flex justify-between items-center gap-2 w-full">
+                                                     <span className={`truncate w-[40%] ${m.team1 === 'Vodka Juniors' ? 'text-indigo-400 font-bold' : ''}`}>{m.team1}</span>
+                                                     <span className="bg-slate-800 px-2 py-1 rounded text-white font-black">{m.score1} - {m.score2}</span>
+                                                     <span className={`truncate text-right w-[40%] ${m.team2 === 'Vodka Juniors' ? 'text-indigo-400 font-bold' : ''}`}>{m.team2}</span>
+                                                 </div>
+                                              </div>
+                                              {!m.isVJ && (
+                                                  <button onClick={() => deleteOtherMatchResult(m.id)} className="text-slate-500 hover:text-rose-400 ml-3"><Trash2 className="w-4 h-4"/></button>
+                                              )}
+                                          </div>
+                                      ))}
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                   </div>
+                )}
 
                 {/* STANDINGS AND KNOCKOUTS MODULE */}
                 {(() => {
@@ -817,16 +929,6 @@ export default function VodkaJuniorsApp() {
                         </div>
                       </div>
                    );
-
-                   // Smart Knockout Calculation Logic
-                   const allLeagueGames = [
-                       ...pastMatches.filter(m => m.league === currentLeague.id).map(m => ({
-                           id: m.id, team1: 'Vodka Juniors', team2: m.opponent, score1: m.scoreVJ, score2: m.scoreOpp, stage: m.stage, isVJ: true
-                       })),
-                       ...leagueMatches.filter(m => m.leagueId === currentLeague.id).map(m => ({
-                           id: m.id, team1: m.team1, team2: m.team2, score1: m.score1, score2: m.score2, stage: m.stage, isVJ: false
-                       }))
-                   ];
 
                    let A1 = '1st Group A'; let A2 = '2nd Group A';
                    let B1 = '1st Group B'; let B2 = '2nd Group B';
@@ -954,7 +1056,13 @@ export default function VodkaJuniorsApp() {
   }
 
   const renderPostMatchReview = () => {
-    // Only grab available players for the match
+    const playersInvolved = Array.from(new Set([
+        ...Object.values(pitchState),
+        ...matchEvents.filter(e => e.type === 'sub').map(e => e.playerOut),
+        ...matchEvents.filter(e => e.type === 'sub').map(e => e.playerIn)
+    ].filter(Boolean)));
+
+    // Fallback to all available players if lineup wasn't fully built
     const matchAvailablePlayers = players.filter(p => p.available);
     const activeLeague = leagues.find(l => l.id === matchLeague);
 
@@ -997,7 +1105,6 @@ export default function VodkaJuniorsApp() {
              <label className="text-xs text-slate-500 font-bold block mb-1">League / Competition</label>
              <select value={matchLeague} onChange={(e) => {
                  updateMatchField('league', e.target.value);
-                 // Auto-select standard group stage if they change leagues
                  updateMatchField('stage', 'Group Stage');
              }} className="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 focus:outline-none focus:border-indigo-500">
                  <option value="">None / Friendly</option>
@@ -1014,10 +1121,19 @@ export default function VodkaJuniorsApp() {
                  </select>
                </div>
            )}
+           <div className="w-32">
+             <label className="text-xs text-slate-500 font-bold block mb-1">Matchday / Wk</label>
+             <input type="number" value={matchdayWeek} onChange={(e) => updateMatchField('matchdayWeek', parseInt(e.target.value) || 1)} className="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 focus:outline-none focus:border-indigo-500 text-center font-bold" />
+           </div>
+           <div className="w-32">
+             <label className="text-xs text-slate-500 font-bold block mb-1">Duration (mins)</label>
+             <input type="number" placeholder="90" value={matchDuration} onChange={(e) => updateMatchField('duration', parseInt(e.target.value) || 0)} className="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 focus:outline-none focus:border-indigo-500 text-center font-bold" />
+           </div>
         </div>
 
         <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 mb-6 relative overflow-hidden">
             <h3 className="text-white font-bold mb-3 text-sm uppercase tracking-wider text-slate-400">Log Match Event</h3>
+            <p className="text-xs text-slate-500 mb-3">Substitutions are optional. If you leave them out, the app will assume the starting 11 played the full match.</p>
             <div className="flex flex-col gap-2">
                <div className="flex gap-2">
                  <select value={newEvent.type} onChange={e => setNewEvent({...newEvent, type: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
@@ -1025,14 +1141,28 @@ export default function VodkaJuniorsApp() {
                     <option value="assist">Assist</option>
                     <option value="yellowCard">Yellow Card</option>
                     <option value="redCard">Red Card</option>
+                    <option value="sub">Substitution</option>
                  </select>
                  <input type="number" placeholder="Min" value={newEvent.minute} onChange={e => setNewEvent({...newEvent, minute: e.target.value})} className="w-14 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-center text-xs focus:border-indigo-500" />
                </div>
                <div className="flex gap-2">
-                  <select value={newEvent.playerId} onChange={e => setNewEvent({...newEvent, playerId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
-                    <option value="">Select Player...</option>
-                    {matchAvailablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
+                 {newEvent.type === 'sub' ? (
+                    <>
+                      <select value={newEvent.playerId} onChange={e => setNewEvent({...newEvent, playerId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
+                        <option value="">Player IN...</option>
+                        {matchAvailablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      <select value={newEvent.playerOutId} onChange={e => setNewEvent({...newEvent, playerOutId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
+                        <option value="">Player OUT...</option>
+                        {matchAvailablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </>
+                 ) : (
+                    <select value={newEvent.playerId} onChange={e => setNewEvent({...newEvent, playerId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
+                      <option value="">Select Player...</option>
+                      {matchAvailablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                 )}
                  <button onClick={addManualEvent} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 rounded font-bold shadow-md transition-colors text-xs">Add</button>
                </div>
             </div>
@@ -1056,7 +1186,7 @@ export default function VodkaJuniorsApp() {
         </div>
 
         <h3 className="text-white font-bold mb-4">Player Ratings & MVPs</h3>
-        <p className="text-xs text-slate-400 mb-3">You can tick multiple players as MVPs.</p>
+        <p className="text-xs text-slate-400 mb-3">You can tick multiple players as MVPs. Everyone marked as "Available" today is shown below.</p>
         <div className="bg-slate-900 rounded-lg border border-slate-700 mb-8 overflow-hidden">
             <table className="w-full text-left text-sm">
                 <thead>
@@ -1148,6 +1278,7 @@ export default function VodkaJuniorsApp() {
                   </div>
                   <div className="text-xs text-slate-400 flex flex-col items-end">
                       <span className="text-emerald-400 font-bold">Avg: {stats.avg}</span>
+                      <span>Mins: {stats.minutes}'</span>
                   </div>
                 </div>
               )})
@@ -1160,7 +1291,11 @@ export default function VodkaJuniorsApp() {
           
           {/* Match Control Header */}
           <div data-html2canvas-ignore className="p-4 bg-slate-800 border border-slate-700 rounded-xl shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div className="text-white font-bold text-lg">Lineup Builder</div>
+            <div className="flex items-center gap-2">
+                <div className="text-white font-bold text-lg">Lineup Builder</div>
+                <button onClick={handleClearLineup} className="p-2 bg-slate-700 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 rounded-lg transition-colors ml-2" title="Clear Entire Lineup"><Trash2 className="w-4 h-4"/></button>
+            </div>
+            
             <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
               <button onClick={handleSaveImage} className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-md">
                 <Download className="w-4 h-4" /> Export Squad
@@ -1263,6 +1398,7 @@ export default function VodkaJuniorsApp() {
                     const stats = getCalculatedStats(selectedPlayerDetails);
                     return (
                       <>
+                        <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Mins</div><div className="font-bold text-lg text-indigo-300">{stats.minutes}'</div></div>
                         <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Avg</div><div className="font-bold text-lg text-emerald-400">{stats.avg}</div></div>
                         <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Goals</div><div className="font-bold text-lg text-white">{stats.goals}</div></div>
                         <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Assists</div><div className="font-bold text-lg text-white">{stats.assists}</div></div>
