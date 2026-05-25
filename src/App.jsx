@@ -1039,11 +1039,10 @@ export default function VodkaJuniorsApp() {
               <option value="name">Sort: A-Z</option>
               <option value="performance">Sort: Avg Rating</option>
             </select>
-            <button
-              onClick={() =>
-                setDoc(doc(db, "players", Date.now().toString()), {
+            <button onClick={() => setDoc(doc(db, "players", Date.now().toString()), {
                   id: Date.now().toString(),
                   name: "New Player",
+                  num: "",
                   positions: "",
                   attendance: 0,
                   refereeDuty: 0,
@@ -1068,6 +1067,7 @@ export default function VodkaJuniorsApp() {
           <thead>
             <tr className="bg-slate-800 text-slate-300 text-sm border-b border-slate-700">
               <th className="p-3 font-semibold">Matchday</th>
+              <th className="p-3 font-semibold text-center">Num</th>
               <th className="p-3 font-semibold">Name</th>
               <th className="p-3 font-semibold">Position</th>
               <th className="p-3 font-semibold text-center" title="Manual">
@@ -1164,9 +1164,22 @@ export default function VodkaJuniorsApp() {
                       {player.available ? "In" : "Out"}
                     </button>
                   </td>
-                  <td className="p-3">
+                  <td className="p-3 text-center">
                     <SyncInput
-                      value={player.name}
+                      value={player.num || ""}
+                      onSave={(val) =>
+                        setDoc(
+                          doc(db, "players", player.id),
+                          { num: val },
+                          { merge: true }
+                        )
+                      }
+                      className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center text-amber-400 font-bold"
+                      placeholder="-"
+                    />
+                  </td>
+                  <td className="p-3">
+                    <SyncInput value={player.name}
                       onSave={(val) =>
                         setDoc(
                           doc(db, "players", player.id),
@@ -2765,7 +2778,6 @@ export default function VodkaJuniorsApp() {
           </table>
         </div>
 
-        {/* Actions Container */}
           <div className="flex flex-col sm:flex-row gap-3 mt-4">
             <button
               onClick={() => {
