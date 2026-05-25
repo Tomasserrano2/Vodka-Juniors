@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, LayoutTemplate, Shield, Plus, X, GripVertical, CheckCircle, XCircle, Search, Download, History, Play, Square, Save, Activity, Clock, Trophy, Trash2, Edit2, Check, TableProperties, Swords, MessageSquare } from 'lucide-react';
+import { Users, LayoutTemplate, Shield, Plus, X, GripVertical, CheckCircle, XCircle, Search, Download, History, Play, Square, Save, Activity, Clock, Trophy, Trash2, Edit2, Check, TableProperties, Swords, MessageSquare, ClipboardList, ArrowRightLeft } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
 
@@ -74,6 +74,7 @@ export default function VodkaJuniorsApp() {
   const [customLabels, setCustomLabels] = useState({});
   const [matchStatus, setMatchStatus] = useState('pre'); 
   const [matchEvents, setMatchEvents] = useState([]); 
+  const [plannedEvents, setPlannedEvents] = useState([]); 
   const [matchRatings, setMatchRatings] = useState({}); 
   const [matchLeague, setMatchLeague] = useState('');
   const [matchStage, setMatchStage] = useState('Group Stage');
@@ -98,6 +99,7 @@ export default function VodkaJuniorsApp() {
   const [selectedPlayerDetails, setSelectedPlayerDetails] = useState(null);
   const [editingHistoryId, setEditingHistoryId] = useState(null); 
   const [newEvent, setNewEvent] = useState({ type: 'goal', playerId: '', playerOutId: '', minute: '' });
+  const [newPlan, setNewPlan] = useState({ type: 'sub', minute: '', playerInId: '', playerOutId: '', notes: '' });
   
   const exportRef = useRef(null); 
 
@@ -136,6 +138,7 @@ export default function VodkaJuniorsApp() {
         setCustomLabels(data.customLabels || {});
         setMatchStatus(data.status || 'pre');
         setMatchEvents(data.events || []);
+        setPlannedEvents(data.plannedEvents || []);
         setMatchRatings(data.ratings || {});
         setMatchLeague(data.league || '');
         setMatchStage(data.stage || 'Group Stage');
@@ -147,7 +150,7 @@ export default function VodkaJuniorsApp() {
         setMatchDuration(data.duration || 90);
       } else {
         setDoc(doc(db, "match", "currentLineup"), {
-          pitchState: {}, formation: '4-3-3', customFormationStr: '1-4-2-3', customLabels: {}, status: 'pre', events: [], ratings: {}, league: '', stage: 'Group Stage', matchdayWeek: 1, mvps: [], opponent: '', scoreVJ: '', scoreOpp: '', duration: 90
+          pitchState: {}, formation: '4-3-3', customFormationStr: '1-4-2-3', customLabels: {}, status: 'pre', events: [], plannedEvents: [], ratings: {}, league: '', stage: 'Group Stage', matchdayWeek: 1, mvps: [], opponent: '', scoreVJ: '', scoreOpp: '', duration: 90
         });
       }
     });
@@ -248,6 +251,37 @@ export default function VodkaJuniorsApp() {
     }
   };
 
+  // --- GAME PLAN ENGINE ---
+  const addPlannedEvent = async () => {
+    if (!newPlan.minute) return;
+    const planToSave = { id: Date.now().toString(), ...newPlan, minute: parseInt(newPlan.minute) };
+    const updatedPlans = [...plannedEvents, planToSave];
+    await updateMatchField('plannedEvents', updatedPlans);
+    setNewPlan({ type: 'sub', minute: '', playerInId: '', playerOutId: '', notes: '' });
+  };
+
+  const deletePlannedEvent = async (id) => {
+    const updatedPlans = plannedEvents.filter(p => p.id !== id);
+    await updateMatchField('plannedEvents', updatedPlans);
+  };
+
+  const executePlannedEvent = async (plan) => {
+    // If it's a sub, convert it to an actual event log
+    if (plan.type === 'sub') {
+      const eventToSave = { 
+        id: Date.now().toString(), 
+        type: 'sub', 
+        minute: plan.minute, 
+        playerIn: plan.playerInId, 
+        playerOut: plan.playerOutId 
+      };
+      await updateMatchField('events', [...matchEvents, eventToSave]);
+    }
+    // Delete it from the plan once executed
+    await deletePlannedEvent(plan.id);
+  };
+
+
   // --- POST MATCH REVIEW ENGINE ---
 
   const changeMatchStatus = async (newStatus) => {
@@ -257,6 +291,7 @@ export default function VodkaJuniorsApp() {
       updates.league = activeLeague ? activeLeague.id : ''; 
       updates.stage = 'Group Stage';
       updates.matchdayWeek = 1;
+      // Do NOT clear plannedEvents here so they carry over to the review!
       updates.events = [];
       updates.ratings = {};
       updates.mvps = [];
@@ -320,7 +355,7 @@ export default function VodkaJuniorsApp() {
     };
     
     await addDoc(collection(db, "pastMatches"), newMatch);
-    await setDoc(doc(db, "match", "currentLineup"), { status: 'pre', events: [], ratings: {}, league: '', stage: '', matchdayWeek: 1, mvps: [], opponent: '', scoreVJ: '', scoreOpp: '', duration: 90 }, { merge: true });
+    await setDoc(doc(db, "match", "currentLineup"), { status: 'pre', events: [], plannedEvents: [], ratings: {}, league: '', stage: '', matchdayWeek: 1, mvps: [], opponent: '', scoreVJ: '', scoreOpp: '', duration: 90 }, { merge: true });
     setActiveTab('history');
   };
 
@@ -572,7 +607,7 @@ export default function VodkaJuniorsApp() {
                   <td className="p-3 text-center text-rose-500 font-medium">{stats.redCards}</td>
                   <td className="p-3 text-center text-emerald-400 font-bold">{stats.avg}</td>
                   <td className="p-3 pr-6">
-                    <SyncInput value={player.comments || ''} onSave={(val) => setDoc(doc(db, "players", player.id), { comments: val }, { merge: true })} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none w-full" placeholder="Add notes..." />
+                    <SyncInput value={player.comments || ''} onSave={(val) => setDoc(doc(db, "players", player.id), { comments: val }, { merge: true })} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm focus:border-indigo-400 focus:outline-none w-full min-w-[200px]" placeholder="Add notes..." />
                   </td>
                 </tr>
               );
@@ -1131,6 +1166,38 @@ export default function VodkaJuniorsApp() {
            </div>
         </div>
 
+        {/* TACTICAL PLAN EXECUTION */}
+        {plannedEvents.length > 0 && (
+           <div className="bg-indigo-900/30 rounded-lg p-4 border border-indigo-500/50 mb-6">
+              <h3 className="text-indigo-400 font-bold mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4"/> Confirm Game Plan</h3>
+              <p className="text-xs text-slate-400 mb-3">You pre-planned these moves. Confirm them below to instantly add them to the match log.</p>
+              <div className="space-y-2">
+                 {plannedEvents.sort((a,b) => a.minute - b.minute).map((plan) => (
+                    <div key={plan.id} className="text-sm flex items-center justify-between bg-slate-900 p-2 rounded border border-slate-700/50">
+                      <div className="flex items-center gap-3">
+                          <span className="text-indigo-400 font-mono w-8">{plan.minute}'</span>
+                          {plan.type === 'sub' ? (
+                             <span className="flex flex-col">
+                               <span>🔄 <strong className="text-emerald-400">{players.find(p=>p.id===plan.playerInId)?.name || 'In'}</strong> ON, <span className="text-slate-500">{players.find(p=>p.id===plan.playerOutId)?.name || 'Out'}</span> OFF</span>
+                               {plan.notes && <span className="text-xs text-slate-400 italic mt-0.5">"{plan.notes}"</span>}
+                             </span>
+                          ) : (
+                             <span className="flex flex-col">
+                               <span><ArrowRightLeft className="w-3 h-3 inline mr-1 text-amber-500"/> <strong className="text-amber-500">Tactic Shift</strong></span>
+                               {plan.notes && <span className="text-xs text-slate-300 mt-0.5">{plan.notes}</span>}
+                             </span>
+                          )}
+                      </div>
+                      <div className="flex gap-2">
+                          <button onClick={() => executePlannedEvent(plan)} className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/40 px-3 py-1 rounded text-xs font-bold transition-colors">✔️ Confirm</button>
+                          <button onClick={() => deletePlannedEvent(plan.id)} className="text-slate-500 hover:text-rose-400 p-1"><X className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                 ))}
+              </div>
+           </div>
+        )}
+
         <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 mb-6 relative overflow-hidden">
             <h3 className="text-white font-bold mb-3 text-sm uppercase tracking-wider text-slate-400">Log Match Event</h3>
             <p className="text-xs text-slate-500 mb-3">Substitutions are optional. If you leave them out, the app will assume the starting 11 played the full match.</p>
@@ -1380,35 +1447,63 @@ export default function VodkaJuniorsApp() {
             ))}
           </div>
 
-          {/* Player Quick Info Bottom Tab */}
-          {selectedPlayerDetails && (
-            <div data-html2canvas-ignore className="mt-2 p-4 rounded-xl border border-slate-700 bg-slate-800 shadow-xl flex flex-col sm:flex-row justify-between items-center gap-4 animate-in slide-in-from-bottom-4 relative">
-              <div className="flex items-center gap-4 w-full sm:w-auto">
-                <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-xl shrink-0">
-                  {selectedPlayerDetails.name.charAt(0)}
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white">{selectedPlayerDetails.name}</h3>
-                  <p className="text-indigo-400 text-sm font-semibold">{selectedPlayerDetails.positions}</p>
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap justify-center sm:justify-end gap-4 sm:gap-6 text-center w-full sm:w-auto">
-                  {(() => {
-                    const stats = getCalculatedStats(selectedPlayerDetails);
-                    return (
-                      <>
-                        <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Mins</div><div className="font-bold text-lg text-indigo-300">{stats.minutes}'</div></div>
-                        <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Avg</div><div className="font-bold text-lg text-emerald-400">{stats.avg}</div></div>
-                        <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Goals</div><div className="font-bold text-lg text-white">{stats.goals}</div></div>
-                        <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Assists</div><div className="font-bold text-lg text-white">{stats.assists}</div></div>
-                      </>
-                    )
-                  })()}
-              </div>
-              <button onClick={() => setSelectedPlayerDetails(null)} className="absolute top-4 right-4 text-slate-500 hover:text-white sm:hidden"><X className="w-5 h-5" /></button>
+          {/* TACTICAL GAME PLAN MODULE */}
+          <div data-html2canvas-ignore className="mt-4 bg-slate-800 rounded-xl shadow-xl border border-slate-700 p-6">
+            <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-indigo-400"/> Tactical Game Plan</h3>
+            <p className="text-sm text-slate-400 mb-4">Pre-plan substitutions and tactical changes. You can execute these with one click during the post-match review.</p>
+            
+            <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 mb-6 flex flex-col gap-3">
+               <div className="flex flex-wrap gap-2">
+                 <select value={newPlan.type} onChange={e => setNewPlan({...newPlan, type: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-2 text-sm focus:border-indigo-500">
+                    <option value="sub">Substitution</option>
+                    <option value="tactic">Positional / Tactical Change</option>
+                 </select>
+                 <input type="number" placeholder="Min" value={newPlan.minute} onChange={e => setNewPlan({...newPlan, minute: e.target.value})} className="w-20 bg-slate-800 text-white border border-slate-600 rounded p-2 text-center text-sm focus:border-indigo-500" />
+               </div>
+               
+               {newPlan.type === 'sub' && (
+                   <div className="flex gap-2">
+                      <select value={newPlan.playerInId} onChange={e => setNewPlan({...newPlan, playerInId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-2 text-sm focus:border-indigo-500">
+                        <option value="">Player IN (Bench)...</option>
+                        {availablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      <select value={newPlan.playerOutId} onChange={e => setNewPlan({...newPlan, playerOutId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-2 text-sm focus:border-indigo-500">
+                        <option value="">Player OUT...</option>
+                        {availablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                   </div>
+               )}
+               
+               <div className="flex gap-2">
+                 <input type="text" placeholder="Indications / Notes (e.g. 'Move Marcus to RB')" value={newPlan.notes} onChange={e => setNewPlan({...newPlan, notes: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-2 text-sm focus:border-indigo-500" />
+                 <button onClick={addPlannedEvent} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 rounded font-bold shadow-md transition-colors text-sm">Add Plan</button>
+               </div>
             </div>
-          )}
+
+            {plannedEvents.length > 0 && (
+                <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                    {plannedEvents.sort((a,b) => a.minute - b.minute).map((plan) => (
+                        <div key={plan.id} className="text-sm flex items-center justify-between bg-slate-900 p-3 rounded border border-slate-700/50 shadow-sm">
+                            <div className="flex items-start gap-3">
+                                <span className="text-indigo-400 font-mono font-bold w-8 mt-0.5">{plan.minute}'</span>
+                                {plan.type === 'sub' ? (
+                                   <div className="flex flex-col">
+                                     <span>🔄 <strong className="text-emerald-400">{players.find(p=>p.id===plan.playerInId)?.name || 'In'}</strong> ON, <span className="text-slate-500">{players.find(p=>p.id===plan.playerOutId)?.name || 'Out'}</span> OFF</span>
+                                     {plan.notes && <span className="text-xs text-slate-400 italic mt-1 border-l-2 border-indigo-500/50 pl-2">"{plan.notes}"</span>}
+                                   </div>
+                                ) : (
+                                   <div className="flex flex-col">
+                                     <span><ArrowRightLeft className="w-4 h-4 inline mr-1 text-amber-500"/> <strong className="text-amber-500">Tactic Shift</strong></span>
+                                     {plan.notes && <span className="text-xs text-slate-300 mt-1">{plan.notes}</span>}
+                                   </div>
+                                )}
+                            </div>
+                            <button onClick={() => deletePlannedEvent(plan.id)} className="text-slate-500 hover:text-rose-400 p-2"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                    ))}
+                </div>
+            )}
+          </div>
 
         </div>
       </div>
