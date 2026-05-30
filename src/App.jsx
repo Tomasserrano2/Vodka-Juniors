@@ -3,7 +3,6 @@ import { Users, LayoutTemplate, Shield, Plus, X, GripVertical, CheckCircle, XCir
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
 
-
 const firebaseConfig = {
   apiKey: "AIzaSyAI1tfjgtlLqfVEfSnyhUYWIEcz_yjlTCE",
   authDomain: "vodka-juniors.firebaseapp.com",
@@ -1549,4 +1548,111 @@ export default function VodkaJuniorsApp() {
                                         <span className={`font-mono font-bold w-8 mt-0.5 ${previewMinute >= plan.minute ? 'text-indigo-300' : 'text-slate-500'}`}>{plan.minute}'</span>
                                         {plan.type === 'sub' ? (
                                            <div className="flex flex-col">
-                                             <span className={previewMinute >= plan
+                                             <span className={previewMinute >= plan.minute ? 'text-white' : 'text-slate-300'}>🔄 <strong className="text-emerald-400">{players.find(p=>p.id===plan.playerInId)?.name || 'In'}</strong> ON, <span className="text-slate-500">{players.find(p=>p.id===plan.playerOutId)?.name || 'Out'}</span> OFF</span>
+                                             {plan.notes && <span className="text-xs text-slate-400 italic mt-1 border-l-2 border-indigo-500/50 pl-2">"{plan.notes}"</span>}
+                                           </div>
+                                        ) : (
+                                           <div className="flex flex-col">
+                                             <span className={previewMinute >= plan.minute ? 'text-white' : 'text-slate-300'}><ArrowRightLeft className="w-4 h-4 inline mr-1 text-amber-500"/> <strong className="text-amber-500">Tactic Shift</strong></span>
+                                             {plan.notes && <span className="text-xs text-slate-400 mt-1">{plan.notes}</span>}
+                                           </div>
+                                        )}
+                                    </div>
+                                    <button data-html2canvas-ignore onClick={() => deletePlannedEvent(plan.id)} className="text-slate-500 hover:text-rose-400 p-2"><Trash2 className="w-4 h-4" /></button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Dynamic Mini Pitch */}
+                <div className="w-full lg:w-1/3 flex flex-col bg-slate-900 rounded-xl border border-slate-700 p-4">
+                   <div data-html2canvas-ignore className="mb-4">
+                       <div className="flex justify-between items-center mb-2">
+                           <span className="text-xs font-bold text-slate-400 uppercase">Match Timeline Scrubber</span>
+                           <span className="text-sm font-bold text-indigo-400 bg-slate-800 px-2 py-1 rounded">{previewMinute}' Mins</span>
+                       </div>
+                       <input type="range" min="0" max={matchDuration || 90} value={previewMinute} onChange={(e) => setPreviewMinute(parseInt(e.target.value))} className="w-full accent-indigo-500 cursor-pointer" />
+                   </div>
+                   
+                   <div className="relative w-full aspect-[3/4] bg-emerald-800 border-2 border-white/50 rounded-sm overflow-hidden flex flex-col-reverse justify-between py-4 shadow-inner">
+                      {/* Pitch Markings */}
+                      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[40%] h-[15%] border-2 border-t-0 border-white/40 pointer-events-none"></div>
+                      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[20%] h-[6%] border-2 border-t-0 border-white/40 pointer-events-none"></div>
+                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[40%] h-[15%] border-2 border-b-0 border-white/40 pointer-events-none"></div>
+                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[20%] h-[6%] border-2 border-b-0 border-white/40 pointer-events-none"></div>
+                      <div className="absolute top-1/2 left-0 w-full h-[2px] bg-white/40 -translate-y-1/2 pointer-events-none"></div>
+                      <div className="absolute top-1/2 left-1/2 w-[25%] aspect-square border-2 border-white/40 rounded-full -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+
+                      {/* Formation Rows */}
+                      {(() => {
+                          let miniSlotIndex = 0;
+                          return layout.map((playerCountInRow, rowIndex) => (
+                            <div key={rowIndex} className="flex justify-evenly items-center w-full relative z-10 px-2">
+                              {Array.from({ length: playerCountInRow }).map((_, colIndex) => {
+                                const currentSlotIndex = miniSlotIndex++;
+                                const assignedPlayerId = previewPitchState[currentSlotIndex];
+                                const assignedPlayer = players.find(p => p.id === assignedPlayerId);
+                                const defaultLabel = FORMATION_LABELS[formation] ? FORMATION_LABELS[formation][currentSlotIndex] || 'POS' : 'POS';
+                                const currentLabel = customLabels[currentSlotIndex] || defaultLabel;
+
+                                return (
+                                  <div className="relative flex flex-col items-center" key={currentSlotIndex}>
+                                    <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center shadow-lg z-20 ${assignedPlayer ? 'bg-indigo-600 border-indigo-300' : 'bg-slate-900/50 border-white/30 border-dashed'}`}>
+                                      {assignedPlayer && (
+                                        <div className="font-bold text-[8px] sm:text-[10px] truncate w-full text-center px-0.5 text-white">
+                                          {getDisplayName(assignedPlayer)}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="mt-0.5 text-white/80 font-bold text-[8px] text-center w-10 z-20 bg-black/40 rounded">{currentLabel}</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ));
+                      })()}
+                   </div>
+                </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans p-4 sm:p-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header & Navigation */}
+        <header className="flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900 p-4 sm:px-8 sm:py-6 rounded-2xl shadow-2xl border border-slate-800">
+          <div className="flex items-center gap-4">
+            <img src="/Vodka Juniors.jpeg" alt="Vodka Juniors Crest" className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl shadow-lg border border-slate-700 object-cover" />
+            <div>
+              <h1 className="text-3xl font-black bg-gradient-to-r from-indigo-400 to-emerald-400 bg-clip-text text-transparent">
+                Vodka Juniors
+              </h1>
+              <p className="text-sm text-slate-400 mt-1">Team Management Platform</p>
+            </div>
+          </div>
+          
+          <div className="flex flex-wrap justify-center bg-slate-800 rounded-lg p-1 border border-slate-700 w-full md:w-auto">
+            <button onClick={() => setActiveTab('matchday')} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all min-w-[100px] ${activeTab === 'matchday' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><LayoutTemplate className="w-4 h-4" /> Matchday</button>
+            <button onClick={() => setActiveTab('league')} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all min-w-[100px] ${activeTab === 'league' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Trophy className="w-4 h-4" /> League</button>
+            <button onClick={() => setActiveTab('dashboard')} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all min-w-[100px] ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Users className="w-4 h-4" /> Database</button>
+            <button onClick={() => setActiveTab('history')} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all min-w-[100px] ${activeTab === 'history' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Activity className="w-4 h-4" /> History</button>
+          </div>
+        </header>
+
+        {/* Main Content Area */}
+        <main className="animate-in fade-in duration-300 slide-in-from-bottom-4">
+          {activeTab === 'dashboard' && renderDashboard()}
+          {activeTab === 'league' && renderLeagueTab()}
+          {activeTab === 'matchday' && renderMatchday()}
+          {activeTab === 'history' && renderHistory()}
+        </main>
+      </div>
+    </div>
+  );
+}
