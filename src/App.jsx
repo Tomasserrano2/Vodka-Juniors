@@ -3,9 +3,7 @@ import { Users, LayoutTemplate, Shield, Plus, X, GripVertical, CheckCircle, XCir
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
 
-// ----------------------------------------------------
-// FIREBASE CONFIGURATION (REPLACE WITH YOUR NUMBERS!)
-// ----------------------------------------------------
+
 const firebaseConfig = {
   apiKey: "AIzaSyAI1tfjgtlLqfVEfSnyhUYWIEcz_yjlTCE",
   authDomain: "vodka-juniors.firebaseapp.com",
@@ -20,8 +18,8 @@ const db = getFirestore(app);
 
 // Fallback data
 const INITIAL_PLAYERS = [
-  { id: '1', name: 'Alex (GK)', positions: 'GK', attendance: 12, refereeDuty: 1, goals: 0, assists: 0, performance: 8.5, available: true, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0, comments: 'Solid shot stopper' },
-  { id: '2', name: 'Marcus (CB)', positions: 'CB', attendance: 10, refereeDuty: 0, goals: 1, assists: 0, performance: 7.2, available: true, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0, comments: 'Needs to work on passing' }
+  { id: '1', num: '1', name: 'Alex (GK)', positions: 'GK', attendance: 12, refereeDuty: 1, goals: 0, assists: 0, performance: 8.5, available: true, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0, comments: 'Solid shot stopper' },
+  { id: '2', num: '4', name: 'Marcus (CB)', positions: 'CB', attendance: 10, refereeDuty: 0, goals: 1, assists: 0, performance: 7.2, available: true, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0, comments: 'Needs to work on passing' }
 ];
 
 const FORMATIONS = {
@@ -181,7 +179,6 @@ export default function VodkaJuniorsApp() {
     return () => unsub();
   }, []);
 
-
   // --- ACTIONS (Write to Cloud) ---
 
   const deletePlayer = async (playerId) => {
@@ -271,7 +268,6 @@ export default function VodkaJuniorsApp() {
         link.href = dataUrl;
         link.download = `VodkaJuniors_Tactics.png`;
         link.click();
-        alert("🦖 ROOOAAARRR!!! Tactical Game Plan Exported!"); // Mascot completion battle cry!
       } catch (err) { 
         console.error("Error saving image:", err); 
         alert("Oops! Something went wrong saving the tactical plan.");
@@ -319,9 +315,7 @@ export default function VodkaJuniorsApp() {
     return state;
   })();
 
-
   // --- POST MATCH REVIEW ENGINE ---
-
   const changeMatchStatus = async (newStatus) => {
     const updates = { status: newStatus };
     if (newStatus === 'review') {
@@ -428,7 +422,6 @@ export default function VodkaJuniorsApp() {
   const addLeagueTeam = async (leagueId, teamName, group = 'A') => {
       const league = leagues.find(l => l.id === leagueId);
       if (!teamName || !league || league.teams.some(t => t.name === teamName)) return;
-      
       const newTeams = [...league.teams, { name: teamName, group }];
       await setDoc(doc(db, "leagues", leagueId), { teams: newTeams }, { merge: true });
   };
@@ -492,23 +485,19 @@ export default function VodkaJuniorsApp() {
           .sort((a,b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || a.name.localeCompare(b.name));
           
       if (league.format === 'groups') {
-          return {
-              groupA: sorted.filter(s => s.group === 'A'),
-              groupB: sorted.filter(s => s.group === 'B')
-          }
+          return { groupA: sorted.filter(s => s.group === 'A'), groupB: sorted.filter(s => s.group === 'B') }
       }
       return { standard: sorted };
   };
 
   // --- STATS ENGINE ---
   const getCalculatedStats = (player) => {
-    if (!player) return { goals: 0, assists: 0, avg: 0, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0 };
+    if (!player) return { goals: 0, assists: 0, avg: 0, mvps: 0, yellowCards: 0, redCards: 0 };
     let goals = player.goals || 0; 
     let assists = player.assists || 0; 
     let mvps = player.mvps || 0;
     let yellowCards = player.yellowCards || 0;
     let redCards = player.redCards || 0;
-    let minutes = player.minutes || 0; // Completely Manual!
     let totalRating = (player.performance || 0) * (player.attendance || 0); 
     let ratingCount = player.attendance || 0;
 
@@ -532,7 +521,7 @@ export default function VodkaJuniorsApp() {
     });
 
     const avg = ratingCount > 0 ? (totalRating / ratingCount).toFixed(1) : (player.performance || 0);
-    return { goals, assists, avg, mvps, yellowCards, redCards, minutes };
+    return { goals, assists, avg, mvps, yellowCards, redCards };
   };
 
   const getDisplayName = (player) => {
@@ -574,26 +563,7 @@ export default function VodkaJuniorsApp() {
               <option value="name">Sort: A-Z</option>
               <option value="performance">Sort: Avg Rating</option>
             </select>
-            <button onClick={() => setDoc(doc(db, "players", Date.now().toString()), {
-                  id: Date.now().toString(),
-                  name: "New Player",
-                  num: "",
-                  positions: "",
-                  attendance: 0,
-                  refereeDuty: 0,
-                  goals: 0,
-                  assists: 0,
-                  performance: 0,
-                  available: true,
-                  mvps: 0,
-                  yellowCards: 0,
-                  redCards: 0,
-                  minutes: 0,
-                  comments: "",
-                })
-              }
-              className="w-full sm:w-auto flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors shrink-0"
-            >
+            <button onClick={() => setDoc(doc(db, "players", Date.now().toString()), { id: Date.now().toString(), num: '', name: 'New Player', positions: '', attendance: 0, refereeDuty: 0, goals: 0, assists: 0, performance: 0, available: true, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0, comments: '' })} className="w-full sm:w-auto flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors shrink-0">
               <Plus className="w-4 h-4" /> Add
             </button>
           </div>
@@ -602,7 +572,7 @@ export default function VodkaJuniorsApp() {
           <thead>
             <tr className="bg-slate-800 text-slate-300 text-sm border-b border-slate-700">
               <th className="p-3 font-semibold">Matchday</th>
-              <th className="p-3 font-semibold text-center">Num</th>
+              <th className="p-3 font-semibold">Num</th>
               <th className="p-3 font-semibold">Name</th>
               <th className="p-3 font-semibold">Position</th>
               <th className="p-3 font-semibold text-center" title="Manual">Att</th>
@@ -628,20 +598,14 @@ export default function VodkaJuniorsApp() {
                       {player.available ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />} {player.available ? 'In' : 'Out'}
                     </button>
                   </td>
-                  <td className="p-3">
-                    <SyncInput
-                      value={player.name}
-                      onSave={(val) =>
-                        setDoc(
-                          doc(db, "players", player.id),
-                          { name: val },
-                          { merge: true },
-                        )
-                      }
-                      className="bg-transparent border-b border-transparent focus:border-indigo-400 focus:outline-none w-full"
-                    />
+                  <td className="p-3"><SyncInput type="number" value={player.num} onSave={(val) => setDoc(doc(db, "players", player.id), { num: val }, { merge: true })} className="bg-slate-900 border border-slate-700 rounded p-1 text-center w-12 text-white" /></td>
+                  <td className="p-3"><SyncInput value={player.name} onSave={(val) => setDoc(doc(db, "players", player.id), { name: val }, { merge: true })} className="bg-transparent border-b border-transparent focus:border-indigo-400 focus:outline-none w-full" /></td>
+                  <td className="p-3"><SyncInput value={player.positions} onSave={(val) => setDoc(doc(db, "players", player.id), { positions: val }, { merge: true })} className="bg-transparent border-b border-transparent focus:border-indigo-400 focus:outline-none w-24 text-sm" /></td>
+                  <td className="p-3 text-center"><SyncInput type="number" value={player.attendance} onSave={(val) => setDoc(doc(db, "players", player.id), { attendance: val }, { merge: true })} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" /></td>
+                  <td className="p-3 text-center"><SyncInput type="number" value={player.refereeDuty || 0} onSave={(val) => setDoc(doc(db, "players", player.id), { refereeDuty: val }, { merge: true })} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" /></td>
+                  <td className="p-3 text-center text-indigo-300 font-medium">
+                    <SyncInput type="number" value={player.minutes || 0} onSave={(val) => setDoc(doc(db, "players", player.id), { minutes: parseInt(val) || 0 }, { merge: true })} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center text-indigo-300" />
                   </td>
-                  
                   <td className="p-3 text-center text-amber-400 font-bold">{stats.mvps}</td>
                   <td className="p-3 text-center text-indigo-300 font-medium">{stats.goals}</td>
                   <td className="p-3 text-center text-indigo-300 font-medium">{stats.assists}</td>
@@ -810,7 +774,6 @@ export default function VodkaJuniorsApp() {
        }))
     ];
     
-    // Extract unique matchdays for grouped view
     const matchdays = [...new Set(allLeagueGames.map(m => m.matchdayWeek))].sort((a,b) => b - a);
 
     return (
@@ -940,786 +903,413 @@ export default function VodkaJuniorsApp() {
                     </div>
                 </div>
 
-            {/* MATCHDAY RESULTS ACCORDION */}
-            {matchdays.length > 0 && (
-              <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700 p-6">
-                <div className="flex items-center gap-2 mb-4 border-b border-slate-700 pb-2">
-                  <Activity className="w-5 h-5 text-indigo-400" />
-                  <h3 className="text-xl font-bold text-white">
-                    Results by Matchday
-                  </h3>
-                </div>
-                <div className="space-y-6">
-                  {matchdays.map((week) => (
-                    <div key={week}>
-                      <h4 className="text-slate-400 font-bold uppercase tracking-wider mb-2 text-sm">
-                        Matchday {week}
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {allLeagueGames
-                          .filter((m) => m.matchdayWeek === week)
-                          .map((m) => (
-                            <div
-                              key={m.id}
-                              className="flex justify-between items-center text-sm bg-slate-900 p-3 rounded-lg border border-slate-700 shadow-sm text-slate-300"
-                            >
-                              <div className="flex flex-col flex-1">
-                                {m.stage && m.stage !== "League Match" && (
-                                  <span className="text-[10px] text-emerald-400/80 font-bold uppercase mb-1">
-                                    {m.stage}
-                                  </span>
-                                )}
-                                <div className="flex justify-between items-center gap-2 w-full">
-                                  <span
-                                    className={`truncate w-[40%] ${m.team1 === "Vodka Juniors" ? "text-indigo-400 font-bold" : ""}`}
-                                  >
-                                    {m.team1}
-                                  </span>
-                                  <span className="bg-slate-800 px-2 py-1 rounded text-white font-black">
-                                    {m.score1} - {m.score2}
-                                  </span>
-                                  <span
-                                    className={`truncate text-right w-[40%] ${m.team2 === "Vodka Juniors" ? "text-indigo-400 font-bold" : ""}`}
-                                  >
-                                    {m.team2}
-                                  </span>
-                                </div>
+                {/* MATCHDAY RESULTS ACCORDION */}
+                {matchdays.length > 0 && (
+                   <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700 p-6">
+                      <div className="flex items-center gap-2 mb-4 border-b border-slate-700 pb-2">
+                         <Activity className="w-5 h-5 text-indigo-400" />
+                         <h3 className="text-xl font-bold text-white">Results by Matchday</h3>
+                      </div>
+                      <div className="space-y-6">
+                          {matchdays.map(week => (
+                              <div key={week}>
+                                  <h4 className="text-slate-400 font-bold uppercase tracking-wider mb-2 text-sm">Matchday {week}</h4>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                      {allLeagueGames.filter(m => m.matchdayWeek === week).map(m => (
+                                          <div key={m.id} className="flex justify-between items-center text-sm bg-slate-900 p-3 rounded-lg border border-slate-700 shadow-sm text-slate-300">
+                                              <div className="flex flex-col flex-1">
+                                                 {m.stage && m.stage !== 'League Match' && <span className="text-[10px] text-emerald-400/80 font-bold uppercase mb-1">{m.stage}</span>}
+                                                 <div className="flex justify-between items-center gap-2 w-full">
+                                                     <span className={`truncate w-[40%] ${m.team1 === 'Vodka Juniors' ? 'text-indigo-400 font-bold' : ''}`}>{m.team1}</span>
+                                                     <span className="bg-slate-800 px-2 py-1 rounded text-white font-black">{m.score1} - {m.score2}</span>
+                                                     <span className={`truncate text-right w-[40%] ${m.team2 === 'Vodka Juniors' ? 'text-indigo-400 font-bold' : ''}`}>{m.team2}</span>
+                                                 </div>
+                                              </div>
+                                              {!m.isVJ && (
+                                                  <button onClick={() => deleteOtherMatchResult(m.id)} className="text-slate-500 hover:text-rose-400 ml-3"><Trash2 className="w-4 h-4"/></button>
+                                              )}
+                                          </div>
+                                      ))}
+                                  </div>
                               </div>
-                              {!m.isVJ && (
-                                <button
-                                  onClick={() => deleteOtherMatchResult(m.id)}
-                                  className="text-slate-500 hover:text-rose-400 ml-3"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              )}
-                            </div>
                           ))}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                   </div>
+                )}
+
+                {/* STANDINGS AND KNOCKOUTS MODULE */}
+                {(() => {
+                   const stds = calculateLeagueStandings(currentLeague);
+                   
+                   const renderTable = (data, title) => (
+                      <div className="bg-slate-800 rounded-xl shadow-xl overflow-hidden border border-slate-700 w-full mb-6">
+                        <div className="p-4 bg-slate-900 border-b border-slate-700 flex items-center gap-2">
+                            <TableProperties className="w-5 h-5 text-amber-400" />
+                            <h2 className="text-xl font-bold text-white">{title}</h2>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[600px]">
+                                <thead>
+                                    <tr className="bg-slate-800 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
+                                        <th className="p-3 font-semibold text-center w-10">#</th>
+                                        <th className="p-3 font-semibold">Club</th>
+                                        <th className="p-3 font-semibold text-center">MP</th>
+                                        <th className="p-3 font-semibold text-center">W</th>
+                                        <th className="p-3 font-semibold text-center">D</th>
+                                        <th className="p-3 font-semibold text-center">L</th>
+                                        <th className="p-3 font-semibold text-center">GF</th>
+                                        <th className="p-3 font-semibold text-center">GA</th>
+                                        <th className="p-3 font-semibold text-center">GD</th>
+                                        <th className="p-3 font-semibold text-center text-white">Pts</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-700 text-slate-200">
+                                    {data.map((team, idx) => (
+                                        <tr key={team.name} className={`transition-colors 
+                                            ${team.name === 'Vodka Juniors' ? 'bg-indigo-900/40 font-bold' : 'hover:bg-slate-750'}
+                                            ${currentLeague.format === 'groups' && idx < 2 ? 'border-l-4 border-l-emerald-500' : ''}
+                                        `}>
+                                            <td className={`p-3 text-center font-mono ${currentLeague.format === 'groups' && idx < 2 ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>{idx + 1}</td>
+                                            <td className="p-3 flex items-center gap-2">
+                                                {team.name === 'Vodka Juniors' ? <Shield className="w-4 h-4 text-indigo-400" /> : <Shield className="w-4 h-4 text-slate-600" />}
+                                                <span className={team.name === 'Vodka Juniors' ? 'text-indigo-300' : 'text-slate-300'}>{team.name}</span>
+                                            </td>
+                                            <td className="p-3 text-center">{team.p}</td>
+                                            <td className="p-3 text-center text-emerald-400">{team.w}</td>
+                                            <td className="p-3 text-center text-slate-400">{team.d}</td>
+                                            <td className="p-3 text-center text-rose-400">{team.l}</td>
+                                            <td className="p-3 text-center">{team.gf}</td>
+                                            <td className="p-3 text-center">{team.ga}</td>
+                                            <td className="p-3 text-center">{team.gd > 0 ? `+${team.gd}` : team.gd}</td>
+                                            <td className="p-3 text-center text-white text-lg font-black">{team.pts}</td>
+                                        </tr>
+                                    ))}
+                                    {data.length === 0 && <tr><td colSpan="10" className="p-4 text-center text-slate-500">No teams assigned.</td></tr>}
+                                </tbody>
+                            </table>
+                        </div>
+                      </div>
+                   );
+
+                   let A1 = '1st Group A'; let A2 = '2nd Group A';
+                   let B1 = '1st Group B'; let B2 = '2nd Group B';
+
+                   if (currentLeague.format === 'groups') {
+                       A1 = stds.groupA[0]?.name || '1st Group A';
+                       A2 = stds.groupA[1]?.name || '2nd Group A';
+                       B1 = stds.groupB[0]?.name || '1st Group B';
+                       B2 = stds.groupB[1]?.name || '2nd Group B';
+                   }
+
+                   const loggedSFs = allLeagueGames.filter(m => m.stage === 'Semi-Final');
+                   const sf1Match = loggedSFs[0] || null;
+                   const sf2Match = loggedSFs[1] || null;
+
+                   const sf1TeamA = sf1Match ? sf1Match.team1 : A1;
+                   const sf1TeamB = sf1Match ? sf1Match.team2 : B2;
+                   const sf2TeamA = sf2Match ? sf2Match.team1 : B1;
+                   const sf2TeamB = sf2Match ? sf2Match.team2 : A2;
+
+                   const getWinnerName = (m, defaultName) => {
+                       if (!m) return defaultName;
+                       if (m.score1 > m.score2) return m.team1;
+                       if (m.score2 > m.score1) return m.team2;
+                       return 'Winner (Pens)'; 
+                   };
+
+                   const loggedFinals = allLeagueGames.filter(m => m.stage === 'Final');
+                   const finalMatch = loggedFinals[0] || null;
+
+                   const finalTeam1 = finalMatch ? finalMatch.team1 : getWinnerName(sf1Match, 'Winner SF 1');
+                   const finalTeam2 = finalMatch ? finalMatch.team2 : getWinnerName(sf2Match, 'Winner SF 2');
+
+                   const renderKnockoutBox = (match, teamA, teamB, label, isFinal = false) => {
+                       if (match) {
+                           const isVJ = match.isVJ;
+                           if (isFinal) {
+                               return (
+                                   <div key={match.id} className="bg-gradient-to-r from-amber-500/20 to-amber-600/20 p-4 rounded-xl border border-amber-500/50 flex flex-col items-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+                                       <div className="w-full flex justify-between items-center gap-4">
+                                           <span className="text-white font-bold text-lg truncate w-1/2">{match.team1}</span>
+                                           <span className="text-slate-300 font-medium text-lg truncate text-right w-1/2">{match.team2}</span>
+                                       </div>
+                                       <span className="bg-slate-900 px-4 py-2 rounded-lg text-amber-400 font-black text-2xl shadow-inner border border-slate-700">{match.score1} - {match.score2}</span>
+                                   </div>
+                               );
+                           }
+                           return (
+                               <div key={match.id} className={`p-3 rounded-lg border flex justify-between items-center shadow-md ${isVJ ? 'bg-indigo-900/40 border-indigo-500/50' : 'bg-slate-900 border-slate-700'}`}>
+                                   <span className={`font-bold truncate w-[40%] ${match.team1 === 'Vodka Juniors' ? 'text-indigo-300' : 'text-slate-300'}`}>{match.team1}</span>
+                                   <span className={`px-3 py-1 rounded font-black ${isVJ ? 'bg-indigo-950 text-emerald-400' : 'bg-slate-800 text-white'}`}>{match.score1} - {match.score2}</span>
+                                   <span className={`font-bold truncate text-right w-[40%] ${match.team2 === 'Vodka Juniors' ? 'text-indigo-300' : 'text-slate-300'}`}>{match.team2}</span>
+                               </div>
+                           );
+                       }
+                       if (isFinal) {
+                            return (
+                                <div className="bg-slate-900/50 p-6 rounded-xl border border-amber-500/30 border-dashed flex flex-col items-center gap-3 shadow-sm">
+                                    <div className="w-full flex justify-between items-center gap-4 text-slate-500 font-medium text-sm">
+                                        <span className="truncate text-center flex-1">{teamA}</span>
+                                        <span className="text-amber-500/50 font-bold text-xs uppercase px-2">VS</span>
+                                        <span className="truncate text-center flex-1">{teamB}</span>
+                                    </div>
+                                    <span className="text-slate-600 font-bold text-xl uppercase tracking-widest">{label}</span>
+                                </div>
+                            );
+                       }
+                       return (
+                           <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700/50 flex justify-between items-center border-dashed shadow-sm">
+                               <span className="text-slate-500 font-medium truncate w-[40%]">{teamA}</span>
+                               <span className="text-slate-600 font-bold text-xs uppercase px-2">{label}</span>
+                               <span className="text-slate-500 font-medium truncate text-right w-[40%]">{teamB}</span>
+                           </div>
+                       );
+                   }
+
+                   return (
+                       <div>
+                           {currentLeague.format === 'groups' ? (
+                               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                                   {renderTable(stds.groupA, `${currentLeague.name} - Group A`)}
+                                   {renderTable(stds.groupB, `${currentLeague.name} - Group B`)}
+                               </div>
+                           ) : renderTable(stds.standard, `${currentLeague.name} Standings`)}
+
+                           {currentLeague.format === 'groups' && (
+                               <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700 p-6 mt-6">
+                                   <div className="flex items-center gap-2 mb-6 border-b border-slate-700 pb-4">
+                                       <Swords className="w-6 h-6 text-rose-500" />
+                                       <h2 className="text-2xl font-black text-white">Knockout Stage</h2>
+                                   </div>
+                                   
+                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                       <div>
+                                           <h3 className="text-slate-400 font-bold uppercase tracking-wider mb-4 text-center">Semi-Finals</h3>
+                                           <div className="space-y-4">
+                                               {renderKnockoutBox(sf1Match, sf1TeamA, sf1TeamB, 'SF 1')}
+                                               {renderKnockoutBox(sf2Match, sf2TeamA, sf2TeamB, 'SF 2')}
+                                           </div>
+                                       </div>
+                                       
+                                       <div className="relative">
+                                           <div className="hidden md:block absolute -left-8 top-1/2 -translate-y-1/2 w-8 h-px bg-slate-700"></div>
+                                           <div className="hidden md:block absolute -left-8 top-1/4 bottom-1/4 w-px bg-slate-700"></div>
+                                           
+                                           <h3 className="text-amber-500 font-bold uppercase tracking-wider mb-4 text-center flex items-center justify-center gap-2"><Trophy className="w-4 h-4"/> Final</h3>
+                                           <div className="h-full flex items-center justify-center -mt-8">
+                                               <div className="w-full max-w-sm">
+                                                   {renderKnockoutBox(finalMatch, finalTeam1, finalTeam2, 'THE FINAL', true)}
+                                               </div>
+                                           </div>
+                                       </div>
+                                   </div>
+                               </div>
+                           )}
+                       </div>
+                   );
+                })()}
+                </>
             )}
-
-            {/* STANDINGS AND KNOCKOUTS MODULE */}
-            {(() => {
-              const stds = calculateLeagueStandings(currentLeague);
-
-              const renderTable = (data, title) => (
-                <div className="bg-slate-800 rounded-xl shadow-xl overflow-hidden border border-slate-700 w-full mb-6">
-                  <div className="p-4 bg-slate-900 border-b border-slate-700 flex items-center gap-2">
-                    <TableProperties className="w-5 h-5 text-amber-400" />
-                    <h2 className="text-xl font-bold text-white">{title}</h2>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[600px]">
-                      <thead>
-                        <tr className="bg-slate-800 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
-                          <th className="p-3 font-semibold text-center w-10">
-                            #
-                          </th>
-                          <th className="p-3 font-semibold">Club</th>
-                          <th className="p-3 font-semibold text-center">MP</th>
-                          <th className="p-3 font-semibold text-center">W</th>
-                          <th className="p-3 font-semibold text-center">D</th>
-                          <th className="p-3 font-semibold text-center">L</th>
-                          <th className="p-3 font-semibold text-center">GF</th>
-                          <th className="p-3 font-semibold text-center">GA</th>
-                          <th className="p-3 font-semibold text-center">GD</th>
-                          <th className="p-3 font-semibold text-center text-white">
-                            Pts
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-700 text-slate-200">
-                        {data.map((team, idx) => (
-                          <tr
-                            key={team.name}
-                            className={`transition-colors 
-                                            ${team.name === "Vodka Juniors" ? "bg-indigo-900/40 font-bold" : "hover:bg-slate-750"}
-                                            ${currentLeague.format === "groups" && idx < 2 ? "border-l-4 border-l-emerald-500" : ""}
-                                        `}
-                          >
-                            <td
-                              className={`p-3 text-center font-mono ${currentLeague.format === "groups" && idx < 2 ? "text-emerald-400 font-bold" : "text-slate-500"}`}
-                            >
-                              {idx + 1}
-                            </td>
-                            <td className="p-3 flex items-center gap-2">
-                              {team.name === "Vodka Juniors" ? (
-                                <Shield className="w-4 h-4 text-indigo-400" />
-                              ) : (
-                                <Shield className="w-4 h-4 text-slate-600" />
-                              )}
-                              <span
-                                className={
-                                  team.name === "Vodka Juniors"
-                                    ? "text-indigo-300"
-                                    : "text-slate-300"
-                                }
-                              >
-                                {team.name}
-                              </span>
-                            </td>
-                            <td className="p-3 text-center">{team.p}</td>
-                            <td className="p-3 text-center text-emerald-400">
-                              {team.w}
-                            </td>
-                            <td className="p-3 text-center text-slate-400">
-                              {team.d}
-                            </td>
-                            <td className="p-3 text-center text-rose-400">
-                              {team.l}
-                            </td>
-                            <td className="p-3 text-center">{team.gf}</td>
-                            <td className="p-3 text-center">{team.ga}</td>
-                            <td className="p-3 text-center">
-                              {team.gd > 0 ? `+${team.gd}` : team.gd}
-                            </td>
-                            <td className="p-3 text-center text-white text-lg font-black">
-                              {team.pts}
-                            </td>
-                          </tr>
-                        ))}
-                        {data.length === 0 && (
-                          <tr>
-                            <td
-                              colSpan="10"
-                              className="p-4 text-center text-slate-500"
-                            >
-                              No teams assigned.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-
-              let A1 = "1st Group A";
-              let A2 = "2nd Group A";
-              let B1 = "1st Group B";
-              let B2 = "2nd Group B";
-
-              if (currentLeague.format === "groups") {
-                A1 = stds.groupA[0]?.name || "1st Group A";
-                A2 = stds.groupA[1]?.name || "2nd Group A";
-                B1 = stds.groupB[0]?.name || "1st Group B";
-                B2 = stds.groupB[1]?.name || "2nd Group B";
-              }
-
-              const loggedSFs = allLeagueGames.filter(
-                (m) => m.stage === "Semi-Final",
-              );
-              const sf1Match = loggedSFs[0] || null;
-              const sf2Match = loggedSFs[1] || null;
-
-              const sf1TeamA = sf1Match ? sf1Match.team1 : A1;
-              const sf1TeamB = sf1Match ? sf1Match.team2 : B2;
-              const sf2TeamA = sf2Match ? sf2Match.team1 : B1;
-              const sf2TeamB = sf2Match ? sf2Match.team2 : A2;
-
-              const getWinnerName = (m, defaultName) => {
-                if (!m) return defaultName;
-                if (m.score1 > m.score2) return m.team1;
-                if (m.score2 > m.score1) return m.team2;
-                return "Winner (Pens)";
-              };
-
-              const loggedFinals = allLeagueGames.filter(
-                (m) => m.stage === "Final",
-              );
-              const finalMatch = loggedFinals[0] || null;
-
-              const finalTeam1 = finalMatch
-                ? finalMatch.team1
-                : getWinnerName(sf1Match, "Winner SF 1");
-              const finalTeam2 = finalMatch
-                ? finalMatch.team2
-                : getWinnerName(sf2Match, "Winner SF 2");
-
-              const renderKnockoutBox = (
-                match,
-                teamA,
-                teamB,
-                label,
-                isFinal = false,
-              ) => {
-                if (match) {
-                  const isVJ = match.isVJ;
-                  if (isFinal) {
-                    return (
-                      <div
-                        key={match.id}
-                        className="bg-gradient-to-r from-amber-500/20 to-amber-600/20 p-4 rounded-xl border border-amber-500/50 flex flex-col items-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
-                      >
-                        <div className="w-full flex justify-between items-center gap-4">
-                          <span className="text-white font-bold text-lg truncate w-1/2">
-                            {match.team1}
-                          </span>
-                          <span className="text-slate-300 font-medium text-lg truncate text-right w-1/2">
-                            {match.team2}
-                          </span>
-                        </div>
-                        <span className="bg-slate-900 px-4 py-2 rounded-lg text-amber-400 font-black text-2xl shadow-inner border border-slate-700">
-                          {match.score1} - {match.score2}
-                        </span>
-                      </div>
-                    );
-                  }
-                  return (
-                    <div
-                      key={match.id}
-                      className={`p-3 rounded-lg border flex justify-between items-center shadow-md ${isVJ ? "bg-indigo-900/40 border-indigo-500/50" : "bg-slate-900 border-slate-700"}`}
-                    >
-                      <span
-                        className={`font-bold truncate w-[40%] ${match.team1 === "Vodka Juniors" ? "text-indigo-300" : "text-slate-300"}`}
-                      >
-                        {match.team1}
-                      </span>
-                      <span
-                        className={`px-3 py-1 rounded font-black ${isVJ ? "bg-indigo-950 text-emerald-400" : "bg-slate-800 text-white"}`}
-                      >
-                        {match.score1} - {match.score2}
-                      </span>
-                      <span
-                        className={`font-bold truncate text-right w-[40%] ${match.team2 === "Vodka Juniors" ? "text-indigo-300" : "text-slate-300"}`}
-                      >
-                        {match.team2}
-                      </span>
-                    </div>
-                  );
-                }
-                // Placeholder
-                if (isFinal) {
-                  return (
-                    <div className="bg-slate-900/50 p-6 rounded-xl border border-amber-500/30 border-dashed flex flex-col items-center gap-3 shadow-sm">
-                      <div className="w-full flex justify-between items-center gap-4 text-slate-500 font-medium text-sm">
-                        <span className="truncate text-center flex-1">
-                          {teamA}
-                        </span>
-                        <span className="text-amber-500/50 font-bold text-xs uppercase px-2">
-                          VS
-                        </span>
-                        <span className="truncate text-center flex-1">
-                          {teamB}
-                        </span>
-                      </div>
-                      <span className="text-slate-600 font-bold text-xl uppercase tracking-widest">
-                        {label}
-                      </span>
-                    </div>
-                  );
-                }
-                return (
-                  <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700/50 flex justify-between items-center border-dashed shadow-sm">
-                    <span className="text-slate-500 font-medium truncate w-[40%]">
-                      {teamA}
-                    </span>
-                    <span className="text-slate-600 font-bold text-xs uppercase px-2">
-                      {label}
-                    </span>
-                    <span className="text-slate-500 font-medium truncate text-right w-[40%]">
-                      {teamB}
-                    </span>
-                  </div>
-                );
-              };
-
-              return (
-                <div>
-                  {currentLeague.format === "groups" ? (
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                      {renderTable(
-                        stds.groupA,
-                        `${currentLeague.name} - Group A`,
-                      )}
-                      {renderTable(
-                        stds.groupB,
-                        `${currentLeague.name} - Group B`,
-                      )}
-                    </div>
-                  ) : (
-                    renderTable(
-                      stds.standard,
-                      `${currentLeague.name} Standings`,
-                    )
-                  )}
-
-                  {currentLeague.format === "groups" && (
-                    <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700 p-6 mt-6">
-                      <div className="flex items-center gap-2 mb-6 border-b border-slate-700 pb-4">
-                        <Swords className="w-6 h-6 text-rose-500" />
-                        <h2 className="text-2xl font-black text-white">
-                          Knockout Stage
-                        </h2>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div>
-                          <h3 className="text-slate-400 font-bold uppercase tracking-wider mb-4 text-center">
-                            Semi-Finals
-                          </h3>
-                          <div className="space-y-4">
-                            {renderKnockoutBox(
-                              sf1Match,
-                              sf1TeamA,
-                              sf1TeamB,
-                              "SF 1",
-                            )}
-                            {renderKnockoutBox(
-                              sf2Match,
-                              sf2TeamA,
-                              sf2TeamB,
-                              "SF 2",
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="relative">
-                          {/* Visual connector lines on desktop */}
-                          <div className="hidden md:block absolute -left-8 top-1/2 -translate-y-1/2 w-8 h-px bg-slate-700"></div>
-                          <div className="hidden md:block absolute -left-8 top-1/4 bottom-1/4 w-px bg-slate-700"></div>
-
-                          <h3 className="text-amber-500 font-bold uppercase tracking-wider mb-4 text-center flex items-center justify-center gap-2">
-                            <Trophy className="w-4 h-4" /> Final
-                          </h3>
-                          <div className="h-full flex items-center justify-center -mt-8">
-                            <div className="w-full max-w-sm">
-                              {renderKnockoutBox(
-                                finalMatch,
-                                finalTeam1,
-                                finalTeam2,
-                                "THE FINAL",
-                                true,
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </>
-        )}
-      </div>
+        </div>
     );
-  };
+  }
 
   const renderPostMatchReview = () => {
-    const playersInvolved = Array.from(
-      new Set(
-        [
-          ...Object.values(pitchState),
-          ...matchEvents
-            .filter((e) => e.type === "sub")
-            .map((e) => e.playerOut),
-          ...matchEvents.filter((e) => e.type === "sub").map((e) => e.playerIn),
-        ].filter(Boolean),
-      ),
-    );
+    const playersInvolved = Array.from(new Set([
+        ...Object.values(pitchState),
+        ...matchEvents.filter(e => e.type === 'sub').map(e => e.playerOut),
+        ...matchEvents.filter(e => e.type === 'sub').map(e => e.playerIn)
+    ].filter(Boolean)));
 
-    // Fallback to all available players if lineup wasn't fully built
-    const matchAvailablePlayers = players.filter((p) => p.available);
-    const activeLeague = leagues.find((l) => l.id === matchLeague);
+    const matchAvailablePlayers = players.filter(p => p.available);
+    const activeLeague = leagues.find(l => l.id === matchLeague);
 
     return (
       <div className="bg-slate-800 rounded-xl shadow-xl border border-slate-700 p-6 max-w-3xl mx-auto">
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-black text-white mb-2">
-            Post-Match Review
-          </h2>
-          <p className="text-slate-400">
-            Log all match details, events, and player ratings here.
-          </p>
+          <h2 className="text-3xl font-black text-white mb-2">Post-Match Review</h2>
+          <p className="text-slate-400">Log all match details, events, and player ratings here.</p>
         </div>
 
         {/* Basic Match Info */}
         <div className="bg-slate-900 rounded-lg p-5 border border-slate-700 mb-6 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex-1 w-full">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">
-              Opponent Name
-            </label>
-            <select
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">Opponent Name</label>
+            <select 
               value={matchOpponent}
-              onChange={(e) => updateMatchField("opponent", e.target.value)}
+              onChange={(e) => updateMatchField('opponent', e.target.value)}
               className="w-full bg-slate-800 border border-slate-600 text-white rounded p-3 focus:outline-none focus:border-indigo-500 font-bold"
             >
               <option value="">Select Opponent...</option>
-              {activeLeague &&
-                activeLeague.teams
-                  .filter((t) => t.name !== "Vodka Juniors")
-                  .map((t) => (
-                    <option key={t.name} value={t.name}>
-                      {t.name}
-                    </option>
-                  ))}
+              {activeLeague && activeLeague.teams.filter(t => t.name !== 'Vodka Juniors').map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
               <option value="Other">Other / Not in League</option>
             </select>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-center">
-              <label className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-1 block">
-                Vodka Jrs
-              </label>
-              <input
-                type="number"
-                value={matchScoreVJ}
-                onChange={(e) => updateMatchField("scoreVJ", e.target.value)}
-                className="w-20 bg-slate-800 border border-indigo-500/50 text-white rounded p-3 focus:outline-none focus:border-indigo-500 font-black text-2xl text-center"
-              />
+              <label className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-1 block">Vodka Jrs</label>
+              <input type="number" value={matchScoreVJ} onChange={(e) => updateMatchField('scoreVJ', e.target.value)} className="w-20 bg-slate-800 border border-indigo-500/50 text-white rounded p-3 focus:outline-none focus:border-indigo-500 font-black text-2xl text-center" />
             </div>
             <span className="text-2xl text-slate-500 font-black mt-4">-</span>
             <div className="text-center">
-              <label className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-1 block">
-                Opponent
-              </label>
-              <input
-                type="number"
-                value={matchScoreOpp}
-                onChange={(e) => updateMatchField("scoreOpp", e.target.value)}
-                className="w-20 bg-slate-800 border border-rose-500/50 text-white rounded p-3 focus:outline-none focus:border-rose-500 font-black text-2xl text-center"
-              />
+              <label className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-1 block">Opponent</label>
+              <input type="number" value={matchScoreOpp} onChange={(e) => updateMatchField('scoreOpp', e.target.value)} className="w-20 bg-slate-800 border border-rose-500/50 text-white rounded p-3 focus:outline-none focus:border-rose-500 font-black text-2xl text-center" />
             </div>
           </div>
         </div>
 
         <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 mb-6 flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <label className="text-xs text-slate-500 font-bold block mb-1">
-              League / Competition
-            </label>
-            <select
-              value={matchLeague}
-              onChange={(e) => {
-                updateMatchField("league", e.target.value);
-                updateMatchField("stage", "Group Stage");
-              }}
-              className="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="">None / Friendly</option>
-              {leagues.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          {activeLeague && activeLeague.format === "groups" && (
-            <div className="flex-1">
-              <label className="text-xs text-amber-500 font-bold block mb-1">
-                Tournament Stage
-              </label>
-              <select
-                value={matchStage}
-                onChange={(e) => updateMatchField("stage", e.target.value)}
-                className="w-full bg-slate-800 border border-amber-500/50 text-white rounded p-2 focus:outline-none focus:border-amber-500"
-              >
-                <option value="Group Stage">Group Stage</option>
-                <option value="Semi-Final">Semi-Final</option>
-                <option value="Final">Final</option>
-              </select>
-            </div>
-          )}
-          <div className="w-32">
-            <label className="text-xs text-slate-500 font-bold block mb-1">
-              Matchday / Wk
-            </label>
-            <input
-              type="number"
-              value={matchdayWeek}
-              onChange={(e) =>
-                updateMatchField("matchdayWeek", parseInt(e.target.value) || 1)
-              }
-              className="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 focus:outline-none focus:border-indigo-500 text-center font-bold"
-            />
-          </div>
-          <div className="w-32">
-            <label className="text-xs text-slate-500 font-bold block mb-1">
-              Duration (mins)
-            </label>
-            <input
-              type="number"
-              placeholder="90"
-              value={matchDuration}
-              onChange={(e) =>
-                updateMatchField("duration", parseInt(e.target.value) || 0)
-              }
-              className="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 focus:outline-none focus:border-indigo-500 text-center font-bold"
-            />
-          </div>
+           <div className="flex-1">
+             <label className="text-xs text-slate-500 font-bold block mb-1">League / Competition</label>
+             <select value={matchLeague} onChange={(e) => {
+                 updateMatchField('league', e.target.value);
+                 updateMatchField('stage', 'Group Stage');
+             }} className="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 focus:outline-none focus:border-indigo-500">
+                 <option value="">None / Friendly</option>
+                 {leagues.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+             </select>
+           </div>
+           {activeLeague && activeLeague.format === 'groups' && (
+               <div className="flex-1">
+                 <label className="text-xs text-amber-500 font-bold block mb-1">Tournament Stage</label>
+                 <select value={matchStage} onChange={(e) => updateMatchField('stage', e.target.value)} className="w-full bg-slate-800 border border-amber-500/50 text-white rounded p-2 focus:outline-none focus:border-amber-500">
+                     <option value="Group Stage">Group Stage</option>
+                     <option value="Semi-Final">Semi-Final</option>
+                     <option value="Final">Final</option>
+                 </select>
+               </div>
+           )}
+           <div className="w-32">
+             <label className="text-xs text-slate-500 font-bold block mb-1">Matchday / Wk</label>
+             <input type="number" value={matchdayWeek} onChange={(e) => updateMatchField('matchdayWeek', parseInt(e.target.value) || 1)} className="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 focus:outline-none focus:border-indigo-500 text-center font-bold" />
+           </div>
+           <div className="w-32">
+             <label className="text-xs text-slate-500 font-bold block mb-1">Duration (mins)</label>
+             <input type="number" placeholder="90" value={matchDuration} onChange={(e) => updateMatchField('duration', parseInt(e.target.value) || 0)} className="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 focus:outline-none focus:border-indigo-500 text-center font-bold" />
+           </div>
         </div>
 
         {/* TACTICAL PLAN EXECUTION */}
         {plannedEvents.length > 0 && (
-          <div className="bg-indigo-900/30 rounded-lg p-4 border border-indigo-500/50 mb-6">
-            <h3 className="text-indigo-400 font-bold mb-3 flex items-center gap-2">
-              <ClipboardList className="w-4 h-4" /> Confirm Game Plan
-            </h3>
-            <p className="text-xs text-slate-400 mb-3">
-              You pre-planned these moves. Confirm them below to instantly add
-              them to the match log.
-            </p>
-            <div className="space-y-2">
-              {plannedEvents
-                .sort((a, b) => a.minute - b.minute)
-                .map((plan) => (
-                  <div
-                    key={plan.id}
-                    className="text-sm flex items-center justify-between bg-slate-900 p-2 rounded border border-slate-700/50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-indigo-400 font-mono w-8">
-                        {plan.minute}'
-                      </span>
-                      {plan.type === "sub" ? (
-                        <span className="flex flex-col">
-                          <span>
-                            🔄{" "}
-                            <strong className="text-emerald-400">
-                              {players.find((p) => p.id === plan.playerInId)
-                                ?.name || "In"}
-                            </strong>{" "}
-                            ON,{" "}
-                            <span className="text-slate-500">
-                              {players.find((p) => p.id === plan.playerOutId)
-                                ?.name || "Out"}
-                            </span>{" "}
-                            OFF
-                          </span>
-                          {plan.notes && (
-                            <span className="text-xs text-slate-400 italic mt-0.5">
-                              "{plan.notes}"
-                            </span>
+           <div className="bg-indigo-900/30 rounded-lg p-4 border border-indigo-500/50 mb-6">
+              <h3 className="text-indigo-400 font-bold mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4"/> Confirm Game Plan</h3>
+              <p className="text-xs text-slate-400 mb-3">You pre-planned these moves. Confirm them below to instantly add them to the match log.</p>
+              <div className="space-y-2">
+                 {plannedEvents.sort((a,b) => a.minute - b.minute).map((plan) => (
+                    <div key={plan.id} className="text-sm flex items-center justify-between bg-slate-900 p-2 rounded border border-slate-700/50">
+                      <div className="flex items-center gap-3">
+                          <span className="text-indigo-400 font-mono w-8">{plan.minute}'</span>
+                          {plan.type === 'sub' ? (
+                             <span className="flex flex-col">
+                               <span>🔄 <strong className="text-emerald-400">{players.find(p=>p.id===plan.playerInId)?.name || 'In'}</strong> ON, <span className="text-slate-500">{players.find(p=>p.id===plan.playerOutId)?.name || 'Out'}</span> OFF</span>
+                               {plan.notes && <span className="text-xs text-slate-400 italic mt-0.5">"{plan.notes}"</span>}
+                             </span>
+                          ) : (
+                             <span className="flex flex-col">
+                               <span><ArrowRightLeft className="w-3 h-3 inline mr-1 text-amber-500"/> <strong className="text-amber-500">Tactic Shift</strong></span>
+                               {plan.notes && <span className="text-xs text-slate-300 mt-0.5">{plan.notes}</span>}
+                             </span>
                           )}
-                        </span>
-                      ) : (
-                        <span className="flex flex-col">
-                          <span>
-                            <ArrowRightLeft className="w-3 h-3 inline mr-1 text-amber-500" />{" "}
-                            <strong className="text-amber-500">
-                              Tactic Shift
-                            </strong>
-                          </span>
-                          {plan.notes && (
-                            <span className="text-xs text-slate-300 mt-0.5">
-                              {plan.notes}
-                            </span>
-                          )}
-                        </span>
-                      )}
+                      </div>
+                      <div className="flex gap-2">
+                          <button onClick={() => executePlannedEvent(plan)} className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/40 px-3 py-1 rounded text-xs font-bold transition-colors">✔️ Confirm</button>
+                          <button onClick={() => deletePlannedEvent(plan.id)} className="text-slate-500 hover:text-rose-400 p-1"><X className="w-4 h-4" /></button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => executePlannedEvent(plan)}
-                        className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/40 px-3 py-1 rounded text-xs font-bold transition-colors"
-                      >
-                        ✔️ Confirm
-                      </button>
-                      <button
-                        onClick={() => deletePlannedEvent(plan.id)}
-                        className="text-slate-500 hover:text-rose-400 p-1"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
+                 ))}
+              </div>
+           </div>
         )}
 
         <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 mb-6 relative overflow-hidden">
-          <h3 className="text-white font-bold mb-3 text-sm uppercase tracking-wider text-slate-400">
-            Log Match Event
-          </h3>
-          <p className="text-xs text-slate-500 mb-3">
-            Substitutions are optional. If you leave them out, the app will
-            assume the starting 11 played the full match.
-          </p>
-          <div className="flex flex-col gap-2">
-            <div className="flex gap-2">
-              <select
-                value={newEvent.type}
-                onChange={(e) =>
-                  setNewEvent({ ...newEvent, type: e.target.value })
-                }
-                className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500"
-              >
-                <option value="goal">Goal</option>
-                <option value="assist">Assist</option>
-                <option value="yellowCard">Yellow Card</option>
-                <option value="redCard">Red Card</option>
-                <option value="sub">Substitution</option>
-              </select>
-              <input
-                type="number"
-                placeholder="Min"
-                value={newEvent.minute}
-                onChange={(e) =>
-                  setNewEvent({ ...newEvent, minute: e.target.value })
-                }
-                className="w-14 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-center text-xs focus:border-indigo-500"
-              />
+            <h3 className="text-white font-bold mb-3 text-sm uppercase tracking-wider text-slate-400">Log Match Event</h3>
+            <p className="text-xs text-slate-500 mb-3">Substitutions are optional. If you leave them out, the app will assume the starting 11 played the full match.</p>
+            <div className="flex flex-col gap-2">
+               <div className="flex gap-2">
+                 <select value={newEvent.type} onChange={e => setNewEvent({...newEvent, type: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
+                    <option value="goal">Goal</option>
+                    <option value="assist">Assist</option>
+                    <option value="yellowCard">Yellow Card</option>
+                    <option value="redCard">Red Card</option>
+                    <option value="sub">Substitution</option>
+                 </select>
+                 <input type="number" placeholder="Min" value={newEvent.minute} onChange={e => setNewEvent({...newEvent, minute: e.target.value})} className="w-14 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-center text-xs focus:border-indigo-500" />
+               </div>
+               <div className="flex gap-2">
+                 {newEvent.type === 'sub' ? (
+                    <>
+                      <select value={newEvent.playerId} onChange={e => setNewEvent({...newEvent, playerId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
+                        <option value="">Player IN...</option>
+                        {matchAvailablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      <select value={newEvent.playerOutId} onChange={e => setNewEvent({...newEvent, playerOutId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
+                        <option value="">Player OUT...</option>
+                        {matchAvailablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </>
+                 ) : (
+                    <select value={newEvent.playerId} onChange={e => setNewEvent({...newEvent, playerId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
+                      <option value="">Select Player...</option>
+                      {matchAvailablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                 )}
+                 <button onClick={addManualEvent} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 rounded font-bold shadow-md transition-colors text-xs">Add</button>
+               </div>
             </div>
-            <div className="flex gap-2">
-              {newEvent.type === "sub" ? (
-                <>
-                  <select
-                    value={newEvent.playerId}
-                    onChange={(e) =>
-                      setNewEvent({ ...newEvent, playerId: e.target.value })
-                    }
-                    className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500"
-                  >
-                    <option value="">Player IN...</option>
-                    {matchAvailablePlayers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={newEvent.playerOutId}
-                    onChange={(e) =>
-                      setNewEvent({ ...newEvent, playerOutId: e.target.value })
-                    }
-                    className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500"
-                  >
-                    <option value="">Player OUT...</option>
-                    {matchAvailablePlayers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              ) : (
-                <select
-                  value={newEvent.playerId}
-                  onChange={(e) =>
-                    setNewEvent({ ...newEvent, playerId: e.target.value })
-                  }
-                  className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500"
-                >
-                  <option value="">Select Player...</option>
-                  {matchAvailablePlayers.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <button
-                onClick={addManualEvent}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 rounded font-bold shadow-md transition-colors text-xs"
-              >
-                Add
-              </button>
-            </div>
-          </div>
         </div>
 
         <div className="bg-slate-900 rounded-lg p-4 mb-6">
-          <h3 className="text-indigo-400 font-bold mb-3 border-b border-slate-700 pb-2">
-            Event Timeline
-          </h3>
-          {matchEvents.length === 0 ? (
-            <p className="text-sm text-slate-500">No events logged.</p>
-          ) : (
+          <h3 className="text-indigo-400 font-bold mb-3 border-b border-slate-700 pb-2">Event Timeline</h3>
+          {matchEvents.length === 0 ? <p className="text-sm text-slate-500">No events logged.</p> : (
             <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-              {matchEvents
-                .sort((a, b) => a.minute - b.minute)
-                .map((ev) => (
-                  <div
-                    key={ev.id}
-                    className="text-sm flex items-center justify-between bg-slate-800 p-2 rounded border border-slate-700/50"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-500 font-mono w-10">
-                        {ev.minute}'
-                      </span>
+              {matchEvents.sort((a,b) => a.minute - b.minute).map((ev) => (
+                <div key={ev.id} className="text-sm flex items-center justify-between bg-slate-800 p-2 rounded border border-slate-700/50">
+                  <div className="flex items-center gap-2">
+                      <span className="text-slate-500 font-mono w-10">{ev.minute}'</span>
                       {getEventText(ev)}
-                    </div>
-                    <button
-                      onClick={() => deleteMatchEvent(ev.id)}
-                      className="text-slate-500 hover:text-rose-400 p-1"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
                   </div>
-                ))}
+                  <button onClick={() => deleteMatchEvent(ev.id)} className="text-slate-500 hover:text-rose-400 p-1"><X className="w-4 h-4" /></button>
+                </div>
+              ))}
             </div>
           )}
         </div>
 
         <h3 className="text-white font-bold mb-4">Player Ratings & MVPs</h3>
-        <p className="text-xs text-slate-400 mb-3">
-          You can tick multiple players as MVPs. Everyone marked as "Available"
-          today is shown below.
-        </p>
+        <p className="text-xs text-slate-400 mb-3">You can tick multiple players as MVPs. Everyone marked as "Available" today is shown below.</p>
         <div className="bg-slate-900 rounded-lg border border-slate-700 mb-8 overflow-hidden">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="bg-slate-800 text-slate-400">
-                <th className="p-3">Player</th>
-                <th className="p-3 text-center">Rating (1-10)</th>
-                <th className="p-3 text-center text-amber-400">MVP</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-700">
-              {matchAvailablePlayers.map((player) => {
-                return (
-                  <tr
-                    key={player.id}
-                    className="hover:bg-slate-800 transition-colors"
-                  >
-                    <td className="p-3 text-slate-300 font-medium">
-                      {player.name}
-                    </td>
-                    <td className="p-3 text-center">
-                      <input
-                        type="number"
-                        step="0.1"
-                        max="10"
-                        min="1"
-                        placeholder="-"
-                        value={matchRatings[player.id] || ""}
-                        onChange={(e) =>
-                          updateMatchRating(player.id, e.target.value)
-                        }
-                        className="w-16 bg-slate-800 border border-slate-600 text-emerald-400 font-bold rounded p-1 text-center focus:outline-none focus:border-emerald-500"
-                      />
-                    </td>
-                    <td className="p-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={matchMvps.includes(player.id)}
-                        onChange={(e) => {
-                          let newMvps = [...matchMvps];
-                          if (e.target.checked) newMvps.push(player.id);
-                          else
-                            newMvps = newMvps.filter((id) => id !== player.id);
-                          updateMatchField("mvps", newMvps);
-                        }}
-                        className="w-5 h-5 accent-amber-500 bg-slate-800 border-slate-600 rounded cursor-pointer"
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+            <table className="w-full text-left text-sm">
+                <thead>
+                    <tr className="bg-slate-800 text-slate-400">
+                        <th className="p-3">Player</th>
+                        <th className="p-3 text-center">Rating (1-10)</th>
+                        <th className="p-3 text-center text-amber-400">MVP</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700">
+                    {matchAvailablePlayers.map(player => {
+                        return (
+                            <tr key={player.id} className="hover:bg-slate-800 transition-colors">
+                                <td className="p-3 text-slate-300 font-medium">{player.name}</td>
+                                <td className="p-3 text-center">
+                                    <input type="number" step="0.1" max="10" min="1" placeholder="-" value={matchRatings[player.id] || ''} onChange={(e) => updateMatchRating(player.id, e.target.value)} className="w-16 bg-slate-800 border border-slate-600 text-emerald-400 font-bold rounded p-1 text-center focus:outline-none focus:border-emerald-500" />
+                                </td>
+                                <td className="p-3 text-center">
+                                    <input type="checkbox" checked={matchMvps.includes(player.id)} onChange={(e) => {
+                                        let newMvps = [...matchMvps];
+                                        if (e.target.checked) newMvps.push(player.id);
+                                        else newMvps = newMvps.filter(id => id !== player.id);
+                                        updateMatchField('mvps', newMvps);
+                                    }} className="w-5 h-5 accent-amber-500 bg-slate-800 border-slate-600 rounded cursor-pointer" />
+                                </td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
         </div>
 
-        <button
-          onClick={finishAndSaveMatch}
-          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-lg"
-        >
+        <button onClick={finishAndSaveMatch} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-lg">
           <Save className="w-5 h-5" /> Save Match to History
         </button>
       </div>
@@ -1727,37 +1317,27 @@ export default function VodkaJuniorsApp() {
   };
 
   const renderMatchday = () => {
-    if (matchStatus === "review") return renderPostMatchReview();
+    if (matchStatus === 'review') return renderPostMatchReview();
 
-    const availablePlayers = players.filter((p) => p.available);
+    const availablePlayers = players.filter(p => p.available);
     const pitchPlayerIds = Object.values(pitchState).filter(Boolean);
-    const benchPlayers = availablePlayers.filter(
-      (p) => !pitchPlayerIds.includes(p.id),
+    const benchPlayers = availablePlayers.filter(p => !pitchPlayerIds.includes(p.id));
+
+    const filteredBench = benchPlayers.filter(p => 
+      p.name.toLowerCase().includes(benchSearchQuery.toLowerCase()) || 
+      p.positions.toLowerCase().includes(benchSearchQuery.toLowerCase())
     );
 
-    const filteredBench = benchPlayers.filter(
-      (p) =>
-        p.name.toLowerCase().includes(benchSearchQuery.toLowerCase()) ||
-        p.positions.toLowerCase().includes(benchSearchQuery.toLowerCase()),
-    );
-
-    const layout =
-      formation === "Custom"
-        ? customFormationStr
-            .split(/[-,\s]+/)
-            .map((n) => parseInt(n, 10))
-            .filter((n) => !isNaN(n) && n > 0)
-        : FORMATIONS[formation] || [1, 4, 3, 3];
-
+    const layout = formation === 'Custom' 
+      ? customFormationStr.split(/[-,\s]+/).map(n => parseInt(n, 10)).filter(n => !isNaN(n) && n > 0)
+      : FORMATIONS[formation] || [1, 4, 3, 3];
+      
     let globalSlotIndex = 0;
 
     return (
-      <div
-        ref={exportRef}
-        className="flex flex-col lg:flex-row gap-6 bg-slate-950 p-2 sm:p-0 rounded-xl"
-      >
+      <div ref={exportRef} className="flex flex-col lg:flex-row gap-6 bg-slate-950 p-2 sm:p-0 rounded-xl">
         {/* Bench Sidebar */}
-        <div
+        <div 
           className="lg:w-1/4 w-full bg-slate-800 rounded-xl shadow-xl border border-slate-700 flex flex-col h-[400px] lg:h-[800px]"
           onDrop={handleDropOnBench}
           onDragOver={handleDragOver}
@@ -1766,124 +1346,65 @@ export default function VodkaJuniorsApp() {
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <Shield className="w-5 h-5 text-indigo-400" /> Available Bench
             </h2>
-            <p className="text-xs text-slate-400 mt-1">
-              Drag players to the pitch
-            </p>
+            <p className="text-xs text-slate-400 mt-1">Drag players to the pitch</p>
             <div className="mt-3 relative" data-html2canvas-ignore>
-              <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-slate-500" />
-              </div>
-              <input
-                type="text"
-                placeholder="Search bench..."
-                value={benchSearchQuery}
-                onChange={(e) => setBenchSearchQuery(e.target.value)}
-                className="w-full text-sm text-white bg-slate-800 border border-slate-600 rounded-md py-1.5 pl-9 pr-3 focus:outline-none focus:border-indigo-500"
-              />
+              <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-500" /></div>
+              <input type="text" placeholder="Search bench..." value={benchSearchQuery} onChange={(e) => setBenchSearchQuery(e.target.value)} className="w-full text-sm text-white bg-slate-800 border border-slate-600 rounded-md py-1.5 pl-9 pr-3 focus:outline-none focus:border-indigo-500" />
             </div>
           </div>
-
+          
           <div className="p-4 flex-1 overflow-y-auto space-y-2 custom-scrollbar">
             {filteredBench.length === 0 ? (
-              <div className="text-slate-500 text-sm text-center mt-10">
-                {benchSearchQuery
-                  ? "No players match your search."
-                  : "No players on the bench."}
-              </div>
+              <div className="text-slate-500 text-sm text-center mt-10">{benchSearchQuery ? 'No players match your search.' : 'No players on the bench.'}</div>
             ) : (
-              filteredBench.map((player) => {
+              filteredBench.map(player => {
                 const stats = getCalculatedStats(player);
                 return (
-                  <div
-                    key={player.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, player.id)}
-                    className="bg-slate-700 border border-slate-600 p-3 rounded-lg cursor-grab active:cursor-grabbing hover:bg-slate-650 transition-colors flex items-center shadow-sm"
-                  >
-                    <GripVertical
-                      className="w-4 h-4 text-slate-400 mr-2 shrink-0"
-                      data-html2canvas-ignore
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-white font-medium text-sm truncate">
-                        {player.name}
-                      </div>
-                      <div className="text-xs text-indigo-300 font-semibold truncate">
-                        {player.positions}
-                      </div>
-                    </div>
-                    <div className="text-xs text-slate-400 flex flex-col items-end">
-                      <span className="text-indigo-300 font-semibold truncate">{player.positions}</span>
-                    </div>
+                <div key={player.id} draggable onDragStart={(e) => handleDragStart(e, player.id)} className="bg-slate-700 border border-slate-600 p-3 rounded-lg cursor-grab active:cursor-grabbing hover:bg-slate-650 transition-colors flex items-center shadow-sm">
+                  <GripVertical className="w-4 h-4 text-slate-400 mr-2 shrink-0" data-html2canvas-ignore />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-white font-medium text-sm truncate">{player.name}</div>
+                    <div className="text-xs text-indigo-300 font-semibold truncate">{player.positions}</div>
                   </div>
-                );
-              })
+                  <div className="text-xs text-slate-400 flex flex-col items-end">
+                      <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded uppercase">{player.positions || 'SUB'}</span>
+                  </div>
+                </div>
+              )})
             )}
           </div>
         </div>
 
         {/* Pitch Area */}
         <div className="lg:w-3/4 w-full flex flex-col gap-4">
+          
           {/* Match Control Header */}
-          <div
-            data-html2canvas-ignore
-            className="p-4 bg-slate-800 border border-slate-700 rounded-xl shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
-          >
+          <div data-html2canvas-ignore className="p-4 bg-slate-800 border border-slate-700 rounded-xl shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className="text-white font-bold text-lg">Lineup Builder</div>
-              <button
-                onClick={handleClearLineup}
-                className="p-2 bg-slate-700 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 rounded-lg transition-colors ml-2"
-                title="Clear Entire Lineup"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+                <div className="text-white font-bold text-lg">Lineup Builder</div>
+                <button onClick={handleClearLineup} className="p-2 bg-slate-700 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 rounded-lg transition-colors ml-2" title="Clear Entire Lineup"><Trash2 className="w-4 h-4"/></button>
             </div>
-
+            
             <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-              <button
-                onClick={handleSaveImage}
-                className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-md"
-              >
+              <button onClick={handleSaveImage} className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-md">
                 <Download className="w-4 h-4" /> Export Squad
               </button>
-              <select
-                value={formation}
-                onChange={handleFormationChange}
-                className="bg-slate-900 text-white border border-slate-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500 text-sm"
-              >
-                {Object.keys(FORMATIONS).map((form) => (
-                  <option key={form} value={form}>
-                    {form}
-                  </option>
-                ))}
+              <select value={formation} onChange={handleFormationChange} className="bg-slate-900 text-white border border-slate-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500 text-sm">
+                {Object.keys(FORMATIONS).map(form => <option key={form} value={form}>{form}</option>)}
                 <option value="Custom">Custom...</option>
               </select>
-              {formation === "Custom" && (
-                <input
-                  type="text"
-                  value={customFormationStr}
-                  onChange={(e) => setCustomFormationStr(e.target.value)}
-                  onBlur={handleCustomFormationBlur}
-                  placeholder="1-4-3-3"
-                  className="bg-slate-900 text-white border border-slate-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500 w-24 text-sm"
-                />
+              {formation === 'Custom' && (
+                <input type="text" value={customFormationStr} onChange={(e) => setCustomFormationStr(e.target.value)} onBlur={handleCustomFormationBlur} placeholder="1-4-3-3" className="bg-slate-900 text-white border border-slate-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500 w-24 text-sm" />
               )}
-              <button
-                onClick={() => changeMatchStatus("review")}
-                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-1.5 rounded-lg font-bold transition-colors shadow-md ml-auto sm:ml-0"
-              >
+              <button onClick={() => changeMatchStatus('review')} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-1.5 rounded-lg font-bold transition-colors shadow-md ml-auto sm:ml-0">
                 To Post-Match Review <Play className="w-4 h-4 fill-current" />
               </button>
             </div>
           </div>
 
-          <div
+          <div 
             className="relative w-full max-w-2xl mx-auto aspect-[3/4] bg-emerald-700 border-4 border-white shadow-2xl rounded-sm overflow-hidden flex flex-col-reverse justify-between py-8"
-            onClick={() => {
-              if (activeSlotSearch !== null) setActiveSlotSearch(null);
-              setSelectedPlayerDetails(null);
-            }}
+            onClick={() => { if (activeSlotSearch !== null) setActiveSlotSearch(null); setSelectedPlayerDetails(null); }}
           >
             {/* Pitch Markings */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[40%] h-[15%] border-4 border-t-0 border-white opacity-50 pointer-events-none"></div>
@@ -1895,125 +1416,49 @@ export default function VodkaJuniorsApp() {
 
             {/* Formation Rows */}
             {layout.map((playerCountInRow, rowIndex) => (
-              <div
-                key={rowIndex}
-                className="flex justify-evenly items-center w-full relative z-10 px-4"
-              >
+              <div key={rowIndex} className="flex justify-evenly items-center w-full relative z-10 px-4">
                 {Array.from({ length: playerCountInRow }).map((_, colIndex) => {
                   const currentSlotIndex = globalSlotIndex++;
                   const assignedPlayerId = pitchState[currentSlotIndex];
-                  const assignedPlayer = players.find(
-                    (p) => p.id === assignedPlayerId,
-                  );
-                  const defaultLabel = FORMATION_LABELS[formation]
-                    ? FORMATION_LABELS[formation][currentSlotIndex] || "POS"
-                    : "POS";
-                  const currentLabel =
-                    customLabels[currentSlotIndex] || defaultLabel;
+                  const assignedPlayer = players.find(p => p.id === assignedPlayerId);
+                  const defaultLabel = FORMATION_LABELS[formation] ? FORMATION_LABELS[formation][currentSlotIndex] || 'POS' : 'POS';
+                  const currentLabel = customLabels[currentSlotIndex] || defaultLabel;
 
                   return (
-                    <div
-                      className="relative flex flex-col items-center"
-                      key={currentSlotIndex}
-                    >
-                      <div
+                    <div className="relative flex flex-col items-center" key={currentSlotIndex}>
+                      <div 
                         onDrop={(e) => handleDropOnPitch(e, currentSlotIndex)}
                         onDragOver={handleDragOver}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (!assignedPlayer) {
-                            setActiveSlotSearch(
-                              activeSlotSearch === currentSlotIndex
-                                ? null
-                                : currentSlotIndex,
-                            );
-                            setSlotSearchQuery("");
-                            setSelectedPlayerDetails(null);
-                          } else {
-                            setSelectedPlayerDetails(assignedPlayer);
-                            setActiveSlotSearch(null);
-                          }
+                          if (!assignedPlayer) { setActiveSlotSearch(activeSlotSearch === currentSlotIndex ? null : currentSlotIndex); setSlotSearchQuery(''); setSelectedPlayerDetails(null); }
+                          else { setSelectedPlayerDetails(assignedPlayer); setActiveSlotSearch(null); }
                         }}
-                        className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer shadow-lg z-20 ${assignedPlayer ? "bg-indigo-600 border-indigo-400" : "bg-slate-900/50 border-white/50 border-dashed hover:bg-slate-800/60"}`}
+                        className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer shadow-lg z-20 ${assignedPlayer ? 'bg-indigo-600 border-indigo-400' : 'bg-slate-900/50 border-white/50 border-dashed hover:bg-slate-800/60'}`}
                       >
                         {assignedPlayer ? (
-                          <div
-                            draggable
-                            onDragStart={(e) =>
-                              handleDragStart(e, assignedPlayer.id)
-                            }
-                            className="flex flex-col items-center justify-center w-full h-full text-white"
-                          >
-                            <div className="font-bold text-xs sm:text-sm truncate w-full text-center px-1">
-                              {getDisplayName(assignedPlayer)}
-                            </div>
+                          <div draggable onDragStart={(e) => handleDragStart(e, assignedPlayer.id)} className="flex flex-col items-center justify-center w-full h-full text-white">
+                            <div className="font-bold text-xs sm:text-sm truncate w-full text-center px-1">{getDisplayName(assignedPlayer)}</div>
                           </div>
                         ) : (
-                          <div className="text-white/40 text-xs text-center px-1 flex flex-col items-center">
-                            <Plus className="w-4 h-4 mb-1" />
-                          </div>
+                          <div className="text-white/40 text-xs text-center px-1 flex flex-col items-center"><Plus className="w-4 h-4 mb-1" /></div>
                         )}
                       </div>
-
-                      <SyncInput
-                        value={currentLabel}
-                        onSave={(val) =>
-                          updateCustomLabel(currentSlotIndex, val)
-                        }
-                        onClick={(e) => e.stopPropagation()}
-                        className="mt-1 bg-transparent text-white/80 font-bold text-[10px] sm:text-xs text-center w-16 focus:outline-none focus:bg-slate-800/50 rounded px-1 transition-colors z-20"
-                        title="Edit position label"
-                      />
+                      
+                      <SyncInput value={currentLabel} onSave={(val) => updateCustomLabel(currentSlotIndex, val)} onClick={(e) => e.stopPropagation()} className="mt-1 bg-transparent text-white/80 font-bold text-[10px] sm:text-xs text-center w-16 focus:outline-none focus:bg-slate-800/50 rounded px-1 transition-colors z-20" title="Edit position label" />
 
                       {/* Quick Search Popover */}
                       {activeSlotSearch === currentSlotIndex && (
-                        <div
-                          className="absolute z-50 bg-slate-800 border border-slate-600 rounded-lg shadow-2xl p-2 w-48 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-                          onClick={(e) => e.stopPropagation()}
-                          data-html2canvas-ignore
-                        >
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs text-slate-300 font-semibold">
-                              Assign Player
-                            </span>
-                            <button
-                              onClick={() => setActiveSlotSearch(null)}
-                              className="text-slate-400 hover:text-white"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                          <input
-                            autoFocus
-                            type="text"
-                            placeholder="Search bench..."
-                            value={slotSearchQuery}
-                            onChange={(e) => setSlotSearchQuery(e.target.value)}
-                            className="w-full bg-slate-900 text-white px-2 py-1.5 rounded text-xs border border-slate-700 focus:outline-none focus:border-indigo-500 mb-2"
-                          />
+                        <div className="absolute z-50 bg-slate-800 border border-slate-600 rounded-lg shadow-2xl p-2 w-48 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" onClick={e => e.stopPropagation()} data-html2canvas-ignore>
+                          <div className="flex justify-between items-center mb-2"><span className="text-xs text-slate-300 font-semibold">Assign Player</span><button onClick={() => setActiveSlotSearch(null)} className="text-slate-400 hover:text-white"><X className="w-3 h-3" /></button></div>
+                          <input autoFocus type="text" placeholder="Search bench..." value={slotSearchQuery} onChange={e => setSlotSearchQuery(e.target.value)} className="w-full bg-slate-900 text-white px-2 py-1.5 rounded text-xs border border-slate-700 focus:outline-none focus:border-indigo-500 mb-2"/>
                           <div className="max-h-40 overflow-y-auto flex flex-col gap-1 custom-scrollbar">
-                            {benchPlayers
-                              .filter((p) =>
-                                p.name
-                                  .toLowerCase()
-                                  .includes(slotSearchQuery.toLowerCase()),
-                              )
-                              .map((p) => (
-                                <button
-                                  key={p.id}
-                                  onClick={() =>
-                                    handleQuickAssign(currentSlotIndex, p.id)
-                                  }
-                                  className="text-left text-xs text-slate-200 hover:bg-indigo-600 px-2 py-1.5 rounded flex justify-between items-center"
-                                >
-                                  <span className="truncate">
-                                    {p.name.replace(/\s*\(.*?\)\s*/g, "")}
-                                  </span>
-                                  <span className="text-[10px] text-indigo-300 ml-1">
-                                    {p.positions}
-                                  </span>
+                            {benchPlayers.filter(p => p.name.toLowerCase().includes(slotSearchQuery.toLowerCase())).map(p => (
+                                <button key={p.id} onClick={() => handleQuickAssign(currentSlotIndex, p.id)} className="text-left text-xs text-slate-200 hover:bg-indigo-600 px-2 py-1.5 rounded flex justify-between items-center">
+                                  <span className="truncate">{p.name.replace(/\s*\(.*?\)\s*/g, '')}</span><span className="text-[10px] text-indigo-300 ml-1">{p.positions}</span>
                                 </button>
-                              ))}
+                              ))
+                            }
                           </div>
                         </div>
                       )}
@@ -2024,218 +1469,84 @@ export default function VodkaJuniorsApp() {
             ))}
           </div>
 
-          {/* TACTICAL GAME PLAN MODULE */}
-          <div
-            data-html2canvas-ignore
-            className="mt-4 bg-slate-800 rounded-xl shadow-xl border border-slate-700 p-6"
-          >
-            <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-              <ClipboardList className="w-5 h-5 text-indigo-400" /> Tactical
-              Game Plan
-            </h3>
-            <p className="text-sm text-slate-400 mb-4">
-              Pre-plan substitutions and tactical changes. You can execute these
-              with one click during the post-match review.
-            </p>
-
-            <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 mb-6 flex flex-col gap-3">
-              <div className="flex flex-wrap gap-2">
-                <select
-                  value={newPlan.type}
-                  onChange={(e) =>
-                    setNewPlan({ ...newPlan, type: e.target.value })
-                  }
-                  className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-2 text-sm focus:border-indigo-500"
-                >
-                  <option value="sub">Substitution</option>
-                  <option value="tactic">Positional / Tactical Change</option>
-                </select>
-                <input
-                  type="number"
-                  placeholder="Min"
-                  value={newPlan.minute}
-                  onChange={(e) =>
-                    setNewPlan({ ...newPlan, minute: e.target.value })
-                  }
-                  className="w-20 bg-slate-800 text-white border border-slate-600 rounded p-2 text-center text-sm focus:border-indigo-500"
-                />
-              </div>
-
-              {newPlan.type === "sub" && (
-                <div className="flex gap-2">
-                  <select
-                    value={newPlan.playerInId}
-                    onChange={(e) =>
-                      setNewPlan({ ...newPlan, playerInId: e.target.value })
-                    }
-                    className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-2 text-sm focus:border-indigo-500"
-                  >
-                    <option value="">Player IN (Bench)...</option>
-                    {availablePlayers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={newPlan.playerOutId}
-                    onChange={(e) =>
-                      setNewPlan({ ...newPlan, playerOutId: e.target.value })
-                    }
-                    className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-2 text-sm focus:border-indigo-500"
-                  >
-                    <option value="">Player OUT...</option>
-                    {availablePlayers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+          {/* Player Quick Info Bottom Tab */}
+          {selectedPlayerDetails && (
+            <div data-html2canvas-ignore className="mt-2 p-4 rounded-xl border border-slate-700 bg-slate-800 shadow-xl flex flex-col sm:flex-row justify-between items-center gap-4 animate-in slide-in-from-bottom-4 relative">
+              <div className="flex items-center gap-4 w-full sm:w-auto">
+                <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-xl shrink-0">
+                  {selectedPlayerDetails.name.charAt(0)}
                 </div>
-              )}
+                <div>
+                  <h3 className="text-xl font-bold text-white">{selectedPlayerDetails.name}</h3>
+                  <p className="text-indigo-400 text-sm font-semibold">{selectedPlayerDetails.positions}</p>
+                </div>
+              </div>
+              
+              <div className="flex flex-wrap justify-center sm:justify-end gap-4 sm:gap-6 text-center w-full sm:w-auto">
+                  {(() => {
+                    const stats = getCalculatedStats(selectedPlayerDetails);
+                    return (
+                      <>
+                        <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Avg</div><div className="font-bold text-lg text-emerald-400">{stats.avg}</div></div>
+                        <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Goals</div><div className="font-bold text-lg text-white">{stats.goals}</div></div>
+                        <div><div className="text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider">Assists</div><div className="font-bold text-lg text-white">{stats.assists}</div></div>
+                      </>
+                    )
+                  })()}
+              </div>
+              <button onClick={() => setSelectedPlayerDetails(null)} className="absolute top-4 right-4 text-slate-500 hover:text-white sm:hidden"><X className="w-5 h-5" /></button>
+            </div>
+          )}
 
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Indications / Notes (e.g. 'Move Marcus to RB')"
-                  value={newPlan.notes}
-                  onChange={(e) =>
-                    setNewPlan({ ...newPlan, notes: e.target.value })
-                  }
-                  className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-2 text-sm focus:border-indigo-500"
-                />
-                <button
-                  onClick={addPlannedEvent}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 rounded font-bold shadow-md transition-colors text-sm"
-                >
-                  Add Plan
+          {/* TACTICAL GAME PLAN MODULE WITH DYNAMIC PITCH */}
+          <div data-html2canvas-ignore className="mt-4 bg-slate-800 rounded-xl shadow-xl border border-slate-700 p-6">
+            <div className="flex justify-between items-center mb-4">
+                <div>
+                    <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-indigo-400"/> Tactical Game Plan</h3>
+                    <p className="text-sm text-slate-400">Pre-plan substitutions and see them live on the mini pitch.</p>
+                </div>
+                <button onClick={handleSaveTacticsImage} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-md">
+                    <Camera className="w-4 h-4" /> Export Tactics
                 </button>
-              </div>
             </div>
-
-            {plannedEvents.length > 0 && (
-              <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
-                {plannedEvents
-                  .sort((a, b) => a.minute - b.minute)
-                  .map((plan) => (
-                    <div
-                      key={plan.id}
-                      className="text-sm flex items-center justify-between bg-slate-900 p-3 rounded border border-slate-700/50 shadow-sm"
-                    >
-                      <div className="flex items-start gap-3">
-                        <span className="text-indigo-400 font-mono font-bold w-8 mt-0.5">
-                          {plan.minute}'
-                        </span>
-                        {plan.type === "sub" ? (
-                          <div className="flex flex-col">
-                            <span>
-                              🔄{" "}
-                              <strong className="text-emerald-400">
-                                {players.find((p) => p.id === plan.playerInId)
-                                  ?.name || "In"}
-                              </strong>{" "}
-                              ON,{" "}
-                              <span className="text-slate-500">
-                                {players.find((p) => p.id === plan.playerOutId)
-                                  ?.name || "Out"}
-                              </span>{" "}
-                              OFF
-                            </span>
-                            {plan.notes && (
-                              <span className="text-xs text-slate-400 italic mt-1 border-l-2 border-indigo-500/50 pl-2">
-                                "{plan.notes}"
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex flex-col">
-                            <span>
-                              <ArrowRightLeft className="w-4 h-4 inline mr-1 text-amber-500" />{" "}
-                              <strong className="text-amber-500">
-                                Tactic Shift
-                              </strong>
-                            </span>
-                            {plan.notes && (
-                              <span className="text-xs text-slate-300 mt-1">
-                                {plan.notes}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => deletePlannedEvent(plan.id)}
-                        className="text-slate-500 hover:text-rose-400 p-2"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+            
+            <div ref={tacticalExportRef} className="flex flex-col lg:flex-row gap-6 p-4 bg-slate-950 rounded-xl">
+                {/* Form and List */}
+                <div className="flex-1 flex flex-col">
+                    <div data-html2canvas-ignore className="bg-slate-900 rounded-lg p-4 border border-slate-700 mb-6 flex flex-col gap-3">
+                       <div className="flex flex-wrap gap-2">
+                         <select value={newPlan.type} onChange={e => setNewPlan({...newPlan, type: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-2 text-sm focus:border-indigo-500">
+                            <option value="sub">Substitution</option>
+                            <option value="tactic">Positional / Tactical Change</option>
+                         </select>
+                         <input type="number" placeholder="Min" value={newPlan.minute} onChange={e => setNewPlan({...newPlan, minute: e.target.value})} className="w-20 bg-slate-800 text-white border border-slate-600 rounded p-2 text-center text-sm focus:border-indigo-500" />
+                       </div>
+                       
+                       {newPlan.type === 'sub' && (
+                           <div className="flex gap-2">
+                              <select value={newPlan.playerInId} onChange={e => setNewPlan({...newPlan, playerInId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-2 text-sm focus:border-indigo-500">
+                                <option value="">Player IN (Bench)...</option>
+                                {availablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                              </select>
+                              <select value={newPlan.playerOutId} onChange={e => setNewPlan({...newPlan, playerOutId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-2 text-sm focus:border-indigo-500">
+                                <option value="">Player OUT...</option>
+                                {availablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                              </select>
+                           </div>
+                       )}
+                       
+                       <div className="flex gap-2">
+                         <input type="text" placeholder="Indications / Notes (e.g. 'Move Marcus to RB')" value={newPlan.notes} onChange={e => setNewPlan({...newPlan, notes: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-2 text-sm focus:border-indigo-500" />
+                         <button onClick={addPlannedEvent} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 rounded font-bold shadow-md transition-colors text-sm">Add Plan</button>
+                       </div>
                     </div>
-                  ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans p-4 sm:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header & Navigation */}
-        <header className="flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900 p-4 sm:px-8 sm:py-6 rounded-2xl shadow-2xl border border-slate-800">
-          <div className="flex items-center gap-4">
-            <img
-              src="/Vodka Juniors.jpeg"
-              alt="Vodka Juniors Crest"
-              className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl shadow-lg border border-slate-700 object-cover"
-            />
-            <div>
-              <h1 className="text-3xl font-black bg-gradient-to-r from-indigo-400 to-emerald-400 bg-clip-text text-transparent">
-                Vodka Juniors
-              </h1>
-              <p className="text-sm text-slate-400 mt-1">
-                Team Management Platform
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap justify-center bg-slate-800 rounded-lg p-1 border border-slate-700 w-full md:w-auto">
-            <button
-              onClick={() => setActiveTab("matchday")}
-              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all min-w-[100px] ${activeTab === "matchday" ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:text-white"}`}
-            >
-              <LayoutTemplate className="w-4 h-4" /> Matchday
-            </button>
-            <button
-              onClick={() => setActiveTab("league")}
-              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all min-w-[100px] ${activeTab === "league" ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:text-white"}`}
-            >
-              <Trophy className="w-4 h-4" /> League
-            </button>
-            <button
-              onClick={() => setActiveTab("dashboard")}
-              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all min-w-[100px] ${activeTab === "dashboard" ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:text-white"}`}
-            >
-              <Users className="w-4 h-4" /> Database
-            </button>
-            <button
-              onClick={() => setActiveTab("history")}
-              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all min-w-[100px] ${activeTab === "history" ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:text-white"}`}
-            >
-              <Activity className="w-4 h-4" /> History
-            </button>
-          </div>
-        </header>
-
-        {/* Main Content Area */}
-        <main className="animate-in fade-in duration-300 slide-in-from-bottom-4">
-          {activeTab === "dashboard" && renderDashboard()}
-          {activeTab === "league" && renderLeagueTab()}
-          {activeTab === "matchday" && renderMatchday()}
-          {activeTab === "history" && renderHistory()}
-        </main>
-      </div>
-    </div>
-  );
-}
+                    {plannedEvents.length > 0 && (
+                        <div className="space-y-2 flex-1 max-h-96 overflow-y-auto custom-scrollbar pr-2">
+                            {plannedEvents.sort((a,b) => a.minute - b.minute).map((plan) => (
+                                <div key={plan.id} className={`text-sm flex items-center justify-between p-3 rounded border shadow-sm transition-colors ${previewMinute >= plan.minute ? 'bg-indigo-900/40 border-indigo-500/50' : 'bg-slate-900 border-slate-700/50'}`}>
+                                    <div className="flex items-start gap-3">
+                                        <span className={`font-mono font-bold w-8 mt-0.5 ${previewMinute >= plan.minute ? 'text-indigo-300' : 'text-slate-500'}`}>{plan.minute}'</span>
+                                        {plan.type === 'sub' ? (
+                                           <div className="flex flex-col">
+                                             <span className={previewMinute >= plan
