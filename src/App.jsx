@@ -12,13 +12,14 @@ const firebaseConfig = {
   appId: "1:836406435815:web:0b10e00b5cc635a8d82742"
 };
 
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // Fallback data
 const INITIAL_PLAYERS = [
-  { id: '1', num: '1', name: 'Alex (GK)', positions: 'GK', attendance: 12, refereeDuty: 1, goals: 0, assists: 0, performance: 8.5, available: true, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0, comments: 'Solid shot stopper' },
-  { id: '2', num: '4', name: 'Marcus (CB)', positions: 'CB', attendance: 10, refereeDuty: 0, goals: 1, assists: 0, performance: 7.2, available: true, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0, comments: 'Needs to work on passing' }
+  { id: '1', num: '1', name: 'Alex (GK)', positions: 'GK', attendance: 12, refereeDuty: 1, goals: 0, assists: 0, performance: 8.5, available: true, mvps: 0, yellowCards: 0, redCards: 0, comments: 'Solid shot stopper' },
+  { id: '2', num: '4', name: 'Marcus (CB)', positions: 'CB', attendance: 10, refereeDuty: 0, goals: 1, assists: 0, performance: 7.2, available: true, mvps: 0, yellowCards: 0, redCards: 0, comments: 'Needs to work on passing' }
 ];
 
 const FORMATIONS = {
@@ -421,6 +422,7 @@ export default function VodkaJuniorsApp() {
   const addLeagueTeam = async (leagueId, teamName, group = 'A') => {
       const league = leagues.find(l => l.id === leagueId);
       if (!teamName || !league || league.teams.some(t => t.name === teamName)) return;
+      
       const newTeams = [...league.teams, { name: teamName, group }];
       await setDoc(doc(db, "leagues", leagueId), { teams: newTeams }, { merge: true });
   };
@@ -546,12 +548,18 @@ export default function VodkaJuniorsApp() {
     let dbPlayers = [...players].filter(p => p.name.toLowerCase().includes(dbSearchQuery.toLowerCase()) || p.positions.toLowerCase().includes(dbSearchQuery.toLowerCase()));
     if (dbSortOption === 'name') dbPlayers.sort((a, b) => a.name.localeCompare(b.name));
     else if (dbSortOption === 'performance') dbPlayers.sort((a, b) => getCalculatedStats(b).avg - getCalculatedStats(a).avg);
+    else if (dbSortOption === 'availability') dbPlayers.sort((a, b) => (a.available === b.available ? a.name.localeCompare(b.name) : a.available ? -1 : 1));
     else dbPlayers.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+
+    const availableCount = players.filter(p => p.available).length;
 
     return (
       <div className="bg-slate-800 rounded-xl shadow-xl overflow-hidden border border-slate-700 w-full overflow-x-auto">
         <div className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900 border-b border-slate-700">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2 shrink-0"><Users className="w-5 h-5 text-indigo-400" /> Squad Database</h2>
+          <h2 className="text-xl font-bold text-white flex items-center gap-2 shrink-0">
+            <Users className="w-5 h-5 text-indigo-400" /> Squad Database
+            <span className="text-sm font-normal text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-full ml-2">{availableCount} Available</span>
+          </h2>
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
             <div className="relative w-full sm:w-48">
               <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-500" /></div>
@@ -561,13 +569,14 @@ export default function VodkaJuniorsApp() {
               <option value="default">Sort: Added (Newest Last)</option>
               <option value="name">Sort: A-Z</option>
               <option value="performance">Sort: Avg Rating</option>
+              <option value="availability">Sort: Matchday (In First)</option>
             </select>
-            <button onClick={() => setDoc(doc(db, "players", Date.now().toString()), { id: Date.now().toString(), num: '', name: 'New Player', positions: '', attendance: 0, refereeDuty: 0, goals: 0, assists: 0, performance: 0, available: true, mvps: 0, yellowCards: 0, redCards: 0, minutes: 0, comments: '' })} className="w-full sm:w-auto flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors shrink-0">
+            <button onClick={() => setDoc(doc(db, "players", Date.now().toString()), { id: Date.now().toString(), num: '', name: 'New Player', positions: '', attendance: 0, refereeDuty: 0, goals: 0, assists: 0, performance: 0, available: true, mvps: 0, yellowCards: 0, redCards: 0, comments: '' })} className="w-full sm:w-auto flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors shrink-0">
               <Plus className="w-4 h-4" /> Add
             </button>
           </div>
         </div>
-        <table className="w-full text-left border-collapse min-w-[1300px]">
+        <table className="w-full text-left border-collapse min-w-[1200px]">
           <thead>
             <tr className="bg-slate-800 text-slate-300 text-sm border-b border-slate-700">
               <th className="p-3 font-semibold">Matchday</th>
@@ -576,7 +585,6 @@ export default function VodkaJuniorsApp() {
               <th className="p-3 font-semibold">Position</th>
               <th className="p-3 font-semibold text-center" title="Manual">Att</th>
               <th className="p-3 font-semibold text-center" title="Manual">Ref</th>
-              <th className="p-3 font-semibold text-center text-indigo-300" title="Manual">Mins ⏱️</th>
               <th className="p-3 font-semibold text-center text-amber-400" title="Auto-Calculated">MVP 🏆</th>
               <th className="p-3 font-semibold text-center text-indigo-300" title="Auto-Calculated">G 🔒</th>
               <th className="p-3 font-semibold text-center text-indigo-300" title="Auto-Calculated">A 🔒</th>
@@ -602,9 +610,6 @@ export default function VodkaJuniorsApp() {
                   <td className="p-3"><SyncInput value={player.positions} onSave={(val) => setDoc(doc(db, "players", player.id), { positions: val }, { merge: true })} className="bg-transparent border-b border-transparent focus:border-indigo-400 focus:outline-none w-24 text-sm" /></td>
                   <td className="p-3 text-center"><SyncInput type="number" value={player.attendance} onSave={(val) => setDoc(doc(db, "players", player.id), { attendance: val }, { merge: true })} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" /></td>
                   <td className="p-3 text-center"><SyncInput type="number" value={player.refereeDuty || 0} onSave={(val) => setDoc(doc(db, "players", player.id), { refereeDuty: val }, { merge: true })} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center" /></td>
-                  <td className="p-3 text-center text-indigo-300 font-medium">
-                    <SyncInput type="number" value={player.minutes || 0} onSave={(val) => setDoc(doc(db, "players", player.id), { minutes: parseInt(val) || 0 }, { merge: true })} className="w-12 bg-slate-900 border border-slate-700 rounded p-1 text-center text-indigo-300" />
-                  </td>
                   <td className="p-3 text-center text-amber-400 font-bold">{stats.mvps}</td>
                   <td className="p-3 text-center text-indigo-300 font-medium">{stats.goals}</td>
                   <td className="p-3 text-center text-indigo-300 font-medium">{stats.assists}</td>
@@ -1114,12 +1119,6 @@ export default function VodkaJuniorsApp() {
   }
 
   const renderPostMatchReview = () => {
-    const playersInvolved = Array.from(new Set([
-        ...Object.values(pitchState),
-        ...matchEvents.filter(e => e.type === 'sub').map(e => e.playerOut),
-        ...matchEvents.filter(e => e.type === 'sub').map(e => e.playerIn)
-    ].filter(Boolean)));
-
     const matchAvailablePlayers = players.filter(p => p.available);
     const activeLeague = leagues.find(l => l.id === matchLeague);
 
@@ -1182,47 +1181,10 @@ export default function VodkaJuniorsApp() {
              <label className="text-xs text-slate-500 font-bold block mb-1">Matchday / Wk</label>
              <input type="number" value={matchdayWeek} onChange={(e) => updateMatchField('matchdayWeek', parseInt(e.target.value) || 1)} className="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 focus:outline-none focus:border-indigo-500 text-center font-bold" />
            </div>
-           <div className="w-32">
-             <label className="text-xs text-slate-500 font-bold block mb-1">Duration (mins)</label>
-             <input type="number" placeholder="90" value={matchDuration} onChange={(e) => updateMatchField('duration', parseInt(e.target.value) || 0)} className="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 focus:outline-none focus:border-indigo-500 text-center font-bold" />
-           </div>
         </div>
-
-        {/* TACTICAL PLAN EXECUTION */}
-        {plannedEvents.length > 0 && (
-           <div className="bg-indigo-900/30 rounded-lg p-4 border border-indigo-500/50 mb-6">
-              <h3 className="text-indigo-400 font-bold mb-3 flex items-center gap-2"><ClipboardList className="w-4 h-4"/> Confirm Game Plan</h3>
-              <p className="text-xs text-slate-400 mb-3">You pre-planned these moves. Confirm them below to instantly add them to the match log.</p>
-              <div className="space-y-2">
-                 {plannedEvents.sort((a,b) => a.minute - b.minute).map((plan) => (
-                    <div key={plan.id} className="text-sm flex items-center justify-between bg-slate-900 p-2 rounded border border-slate-700/50">
-                      <div className="flex items-center gap-3">
-                          <span className="text-indigo-400 font-mono w-8">{plan.minute}'</span>
-                          {plan.type === 'sub' ? (
-                             <span className="flex flex-col">
-                               <span>🔄 <strong className="text-emerald-400">{players.find(p=>p.id===plan.playerInId)?.name || 'In'}</strong> ON, <span className="text-slate-500">{players.find(p=>p.id===plan.playerOutId)?.name || 'Out'}</span> OFF</span>
-                               {plan.notes && <span className="text-xs text-slate-400 italic mt-0.5">"{plan.notes}"</span>}
-                             </span>
-                          ) : (
-                             <span className="flex flex-col">
-                               <span><ArrowRightLeft className="w-3 h-3 inline mr-1 text-amber-500"/> <strong className="text-amber-500">Tactic Shift</strong></span>
-                               {plan.notes && <span className="text-xs text-slate-300 mt-0.5">{plan.notes}</span>}
-                             </span>
-                          )}
-                      </div>
-                      <div className="flex gap-2">
-                          <button onClick={() => executePlannedEvent(plan)} className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/40 px-3 py-1 rounded text-xs font-bold transition-colors">✔️ Confirm</button>
-                          <button onClick={() => deletePlannedEvent(plan.id)} className="text-slate-500 hover:text-rose-400 p-1"><X className="w-4 h-4" /></button>
-                      </div>
-                    </div>
-                 ))}
-              </div>
-           </div>
-        )}
 
         <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 mb-6 relative overflow-hidden">
             <h3 className="text-white font-bold mb-3 text-sm uppercase tracking-wider text-slate-400">Log Match Event</h3>
-            <p className="text-xs text-slate-500 mb-3">Substitutions are optional. If you leave them out, the app will assume the starting 11 played the full match.</p>
             <div className="flex flex-col gap-2">
                <div className="flex gap-2">
                  <select value={newEvent.type} onChange={e => setNewEvent({...newEvent, type: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
@@ -1230,28 +1192,14 @@ export default function VodkaJuniorsApp() {
                     <option value="assist">Assist</option>
                     <option value="yellowCard">Yellow Card</option>
                     <option value="redCard">Red Card</option>
-                    <option value="sub">Substitution</option>
                  </select>
                  <input type="number" placeholder="Min" value={newEvent.minute} onChange={e => setNewEvent({...newEvent, minute: e.target.value})} className="w-14 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-center text-xs focus:border-indigo-500" />
                </div>
                <div className="flex gap-2">
-                 {newEvent.type === 'sub' ? (
-                    <>
-                      <select value={newEvent.playerId} onChange={e => setNewEvent({...newEvent, playerId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
-                        <option value="">Player IN...</option>
-                        {matchAvailablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                      <select value={newEvent.playerOutId} onChange={e => setNewEvent({...newEvent, playerOutId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
-                        <option value="">Player OUT...</option>
-                        {matchAvailablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                    </>
-                 ) : (
-                    <select value={newEvent.playerId} onChange={e => setNewEvent({...newEvent, playerId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
-                      <option value="">Select Player...</option>
-                      {matchAvailablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                 )}
+                 <select value={newEvent.playerId} onChange={e => setNewEvent({...newEvent, playerId: e.target.value})} className="flex-1 bg-slate-800 text-white border border-slate-600 rounded p-1.5 text-xs focus:border-indigo-500">
+                    <option value="">Select Player...</option>
+                    {matchAvailablePlayers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                 </select>
                  <button onClick={addManualEvent} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 rounded font-bold shadow-md transition-colors text-xs">Add</button>
                </div>
             </div>
@@ -1334,7 +1282,7 @@ export default function VodkaJuniorsApp() {
     let globalSlotIndex = 0;
 
     return (
-      <div ref={exportRef} className="flex flex-col lg:flex-row gap-6 bg-slate-950 p-2 sm:p-0 rounded-xl">
+      <div className="flex flex-col lg:flex-row gap-6 bg-slate-950 p-2 sm:p-0 rounded-xl">
         {/* Bench Sidebar */}
         <div 
           className="lg:w-1/4 w-full bg-slate-800 rounded-xl shadow-xl border border-slate-700 flex flex-col h-[400px] lg:h-[800px]"
@@ -1357,7 +1305,6 @@ export default function VodkaJuniorsApp() {
               <div className="text-slate-500 text-sm text-center mt-10">{benchSearchQuery ? 'No players match your search.' : 'No players on the bench.'}</div>
             ) : (
               filteredBench.map(player => {
-                const stats = getCalculatedStats(player);
                 return (
                 <div key={player.id} draggable onDragStart={(e) => handleDragStart(e, player.id)} className="bg-slate-700 border border-slate-600 p-3 rounded-lg cursor-grab active:cursor-grabbing hover:bg-slate-650 transition-colors flex items-center shadow-sm">
                   <GripVertical className="w-4 h-4 text-slate-400 mr-2 shrink-0" data-html2canvas-ignore />
@@ -1401,7 +1348,7 @@ export default function VodkaJuniorsApp() {
             </div>
           </div>
 
-          <div 
+          <div ref={exportRef} 
             className="relative w-full max-w-2xl mx-auto aspect-[3/4] bg-emerald-700 border-4 border-white shadow-2xl rounded-sm overflow-hidden flex flex-col-reverse justify-between py-8"
             onClick={() => { if (activeSlotSearch !== null) setActiveSlotSearch(null); setSelectedPlayerDetails(null); }}
           >
